@@ -1,5 +1,5 @@
 /* 小一 PWA Service Worker — 基本離線殼層快取 */
-const CACHE = "xiao-yi-v4";
+const CACHE = "xiao-yi-v5";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -7,9 +7,11 @@ const PRECACHE = [
   "./mobile/voice_studio.html",
   "./mobile/voice_studio.css",
   "./mobile/voice_studio.js",
+  "./mobile/assets/home.png",
   "./desktop/voice_studio.html",
   "./desktop/voice_studio.css",
   "./desktop/voice_studio.js",
+  "./desktop/assets/home.png",
   "./desktop/auth.js",
   "./desktop/auto_tag.js",
   "./desktop/wake_word.js",

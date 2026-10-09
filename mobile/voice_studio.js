@@ -474,7 +474,8 @@
   function applyUserChrome() {
     const name = currentUserLabel();
     if (els.heroGreeting) {
-      els.heroGreeting.textContent = `${name}，想做什麼嗎？`;
+      els.heroGreeting.textContent =
+        name && name !== "你好" ? `${name}，你今天在想什麼？` : "你今天在想什麼？";
     }
     if (els.userName) els.userName.textContent = name;
     if (els.userAvatar) els.userAvatar.textContent = name.slice(0, 1) || "一";
@@ -3436,8 +3437,21 @@
   if (window.WebLLMTagger) bindAi();
   else window.addEventListener("webllm-tagger-ready", bindAi, { once: true });
   bindAi();
+  function bindHomeQuickActions() {
+    document.querySelectorAll("[data-prompt]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const prompt = String(btn.getAttribute("data-prompt") || "");
+        if (!els.promptInput) return;
+        els.promptInput.value = prompt;
+        els.promptInput.focus();
+        setStatus("已帶入提示，可繼續輸入或傳送");
+      });
+    });
+  }
+
   initChromeUi();
   bindVisionImageUi();
+  bindHomeQuickActions();
   applyVoiceAssistantUi();
   setWakeUi("idle");
   loadVoices();

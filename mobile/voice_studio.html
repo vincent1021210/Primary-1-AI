@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=89" />
+    <link rel="stylesheet" href="voice_studio.css?v=90" />
   </head>
   <body class="auth-locked platform-mobile">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -231,7 +231,7 @@
           </button>
           <div class="mobile-brand">
             <span class="brand-mark" aria-hidden="true"></span>
-            <span class="brand-name">小一</span>
+            <span class="brand-name">小一AI</span>
           </div>
           <button
             type="button"
@@ -245,10 +245,14 @@
         </header>
 
         <header class="main-head">
-          <label class="voice-assist-bar" for="voiceAssistantToggleMain">
+          <div class="mode-tabs" aria-label="模式">
+            <button type="button" class="mode-tab active" id="tabChat">對話</button>
+            <button type="button" class="mode-tab" id="tabWork"><span class="mode-spark">✦</span>工作</button>
+          </div>
+          <label class="voice-assist-bar compact" for="voiceAssistantToggleMain">
             <span class="voice-assist-bar-text">
               <strong>語音助理</strong>
-              <small id="voiceAssistBarHint">開啟後點麥克風，即可喊「小一小一」</small>
+              <small id="voiceAssistBarHint">開啟後點麥克風喊「小一小一」</small>
             </span>
             <input
               type="checkbox"
@@ -264,9 +268,40 @@
           <span id="corePreview" class="core-preview"></span>
         </header>
 
-        <section class="hero" id="hero">
-          <h1 id="heroGreeting">想做什麼嗎？</h1>
-          <p class="hero-sub">點麥克風啟動常亮守護 · 喊「小一小一」· 看圖提問</p>
+        <section class="hero stitch-home" id="hero">
+          <img
+            class="hero-home-art"
+            src="assets/home.png"
+            alt="小一 AI 主頁"
+            width="430"
+            height="880"
+          />
+          <div class="hero-home-overlay">
+            <h1 id="heroGreeting">你今天在想什麼？</h1>
+            <div class="home-actions" id="homeActions">
+              <button type="button" class="home-action" data-prompt="幫我建立一張圖像，主題：">
+                <span class="home-action-ico" aria-hidden="true">🖼</span>
+                <span>建立圖像</span>
+              </button>
+              <button type="button" class="home-action" data-prompt="幫我編寫或編輯：">
+                <span class="home-action-ico" aria-hidden="true">✎</span>
+                <span>編寫或編輯</span>
+              </button>
+              <button type="button" class="home-action" data-prompt="搜尋網路：">
+                <span class="home-action-ico" aria-hidden="true">🌐</span>
+                <span>搜尋網路</span>
+              </button>
+            </div>
+            <p class="home-chip-label">推薦提示</p>
+            <div class="home-chips" id="homeChips">
+              <button type="button" class="home-chip" data-prompt="給我幾個 Shorts 劇情創意">
+                Shorts劇情創意
+              </button>
+              <button type="button" class="home-chip" data-prompt="幫我生成 YouTube 頭像構想">
+                生成YouTube頭像
+              </button>
+            </div>
+          </div>
         </section>
 
         <section class="chat-wrap">
@@ -335,11 +370,11 @@
             <input
               id="promptInput"
               type="text"
-              placeholder="可先傳照片，再打字或用語音問小一…"
+              placeholder="想問什麼都可以"
               enterkeyhint="send"
             />
             <button type="button" id="modelChip" class="model-chip" title="目前模型">
-              Flash
+              思考
             </button>
             <button
               type="submit"
@@ -493,7 +528,7 @@
     <script src="../desktop/wake_word.js?v=87"></script>
     <script src="../desktop/gemini_tagger.js?v=81"></script>
     <script type="module" src="../desktop/webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=89"></script>
+    <script src="voice_studio.js?v=90"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

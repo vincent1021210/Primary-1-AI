@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=88" />
+    <link rel="stylesheet" href="voice_studio.css?v=90" />
     <script>
       // 手機裝置一律進手機版；若有暫存 session 先升成永久再跳轉
       (function () {
@@ -181,7 +181,7 @@
         <div class="sidebar-top">
           <div class="brand">
             <span class="brand-mark" aria-hidden="true"></span>
-            <span class="brand-name">小一</span>
+            <span class="brand-name">小一AI</span>
           </div>
           <button type="button" id="btnToggleSidebar" class="icon-btn" title="收合側欄" aria-label="收合側欄">
             ☰
@@ -248,7 +248,7 @@
           </button>
           <div class="mobile-brand">
             <span class="brand-mark" aria-hidden="true"></span>
-            <span class="brand-name">小一</span>
+            <span class="brand-name">小一AI</span>
           </div>
           <button
             type="button"
@@ -262,15 +262,38 @@
         </header>
 
         <header class="main-head">
+          <div class="mode-tabs" aria-label="模式">
+            <button type="button" class="mode-tab active" id="tabChat">對話</button>
+            <button type="button" class="mode-tab" id="tabWork"><span class="mode-spark">✦</span>工作</button>
+          </div>
           <p id="wakeStatus" class="wake-line">
             待命：說「小一小一」或「你好」後再下指令
           </p>
           <span id="corePreview" class="core-preview"></span>
         </header>
 
-        <section class="hero" id="hero">
-          <h1 id="heroGreeting">想做什麼嗎？</h1>
-          <p class="hero-sub">語音喚醒小一 · Gemini 糾錯 · 導航／天氣／計算</p>
+        <section class="hero stitch-home" id="hero">
+          <img
+            class="hero-home-art"
+            src="assets/home.png"
+            alt="小一 AI 主頁"
+            width="1280"
+            height="800"
+          />
+          <div class="hero-home-overlay">
+            <h1 id="heroGreeting">你今天在想什麼？</h1>
+            <div class="home-actions desktop" id="homeActions">
+              <button type="button" class="home-action-link" data-prompt="幫我建立一張圖像，主題：">
+                建立圖像
+              </button>
+              <button type="button" class="home-action-link" data-prompt="幫我編寫或編輯：">
+                編寫或編輯
+              </button>
+              <button type="button" class="home-action-link" data-prompt="搜尋網路：">
+                搜尋網路
+              </button>
+            </div>
+          </div>
         </section>
 
         <section class="chat-wrap">
@@ -310,11 +333,11 @@
             <input
               id="promptInput"
               type="text"
-              placeholder="打字問小一，按傳送；或按麥克風用語音…"
+              placeholder="想問什麼都可以"
               enterkeyhint="send"
             />
             <button type="button" id="modelChip" class="model-chip" title="目前模型">
-              Flash
+              思考
             </button>
             <button
               type="submit"
@@ -468,7 +491,7 @@
     <script src="wake_word.js?v=72"></script>
     <script src="gemini_tagger.js?v=81"></script>
     <script type="module" src="webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=88"></script>
+    <script src="voice_studio.js?v=90"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
