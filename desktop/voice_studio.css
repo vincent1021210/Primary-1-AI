@@ -1024,6 +1024,14 @@ body.auth-locked .app {
   text-align: center;
 }
 
+.voice-tip {
+  margin: 6px 8px 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #5f6368;
+  text-align: center;
+}
+
 .disclaimer {
   margin: 6px 0 0;
   font-size: 11px;

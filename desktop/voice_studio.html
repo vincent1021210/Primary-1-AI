@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=70" />
+    <link rel="stylesheet" href="voice_studio.css?v=72" />
   </head>
   <body class="auth-locked">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -277,6 +277,10 @@
             </button>
           </form>
           <p id="status" class="status">說「小一小一」或「你好」開始</p>
+          <p class="voice-tip">
+            建議配戴耳機使用，長句辨識與語音打斷效果會更好；說完後請稍停約
+            1.5 秒再等小一回應。
+          </p>
           <p class="disclaimer">小一是 AI，有時可能會出錯。</p>
         </section>
 
@@ -377,10 +381,10 @@
     <script src="config.local.js?v=68" onerror="/* optional */"></script>
     <script src="auth.js?v=68"></script>
     <script src="auto_tag.js?v=42"></script>
-    <script src="wake_word.js?v=71"></script>
+    <script src="wake_word.js?v=72"></script>
     <script src="gemini_tagger.js?v=68"></script>
     <script type="module" src="webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=71"></script>
+    <script src="voice_studio.js?v=72"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

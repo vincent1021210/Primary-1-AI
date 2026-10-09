@@ -102,15 +102,17 @@
   let listenGeneration = 0;
   let ignoreEndOnce = false;
   let ttsPausedListen = false;
-  /** 待確認的喚醒指令（湊齊 Android 切段） */
-  let pendingWakeCommand = "";
-  let pendingWakeTimer = null;
+  /** 手機 Web Speech 切段拼圖：最終句快取 + 靜音計時 */
+  let finalTranscriptCache = "";
+  let lastInterimTranscript = "";
+  let silenceTimer = null;
   let pendingWokeWaitTimer = null;
   /** 小一說完後可直接續說的時間 */
   const FOLLOW_UP_MS_DESKTOP = 8000;
   const FOLLOW_UP_MS_MOBILE = 15000;
-  const COMMIT_MS_DESKTOP = 1200;
-  const COMMIT_MS_MOBILE = 2400;
+  /** 完全安靜多久才認定講完（手機 isFinal 過敏感，需拼圖） */
+  const SILENCE_MS_DESKTOP = 1200;
+  const SILENCE_MS_MOBILE = 1500;
   /** 結果面板顯示 5 秒後自動消失 */
   const SEARCH_PANEL_AUTO_HIDE_MS = 0; // 0 = 不自動隱藏
   let searchPanelHideTimer = null;
@@ -635,16 +637,17 @@
     return isMobileOrTwa() ? FOLLOW_UP_MS_MOBILE : FOLLOW_UP_MS_DESKTOP;
   }
 
-  function commitMs() {
-    return isMobileOrTwa() ? COMMIT_MS_MOBILE : COMMIT_MS_DESKTOP;
+  function silenceMs() {
+    return isMobileOrTwa() ? SILENCE_MS_MOBILE : SILENCE_MS_DESKTOP;
   }
 
-  function clearPendingWakeCommit() {
-    if (pendingWakeTimer) {
-      clearTimeout(pendingWakeTimer);
-      pendingWakeTimer = null;
+  function clearSpeechPuzzle() {
+    if (silenceTimer) {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
     }
-    pendingWakeCommand = "";
+    finalTranscriptCache = "";
+    lastInterimTranscript = "";
   }
 
   function clearPendingWokeWait() {
@@ -654,43 +657,162 @@
     }
   }
 
-  /** 延遲送出指令，讓切成多段的語音有時間湊齊 */
-  function scheduleWakeCommandCommit(command, wakeWord) {
-    const merged = WakeWord.mergeSpeechFragments
-      ? WakeWord.mergeSpeechFragments(pendingWakeCommand, command)
-      : String(command || "").trim();
-    if (!merged) return;
-    pendingWakeCommand = merged;
-    clearPendingWokeWait();
-    if (typeof WakeWord.armTimeout === "function") {
-      WakeWord.armTimeout(wakeSession, onWakeTimeout);
-    }
-    setBadge("awake", "聽取中");
-    setWakeUi("awake", pendingWakeCommand);
-    els.interim.textContent = `聽取中：${pendingWakeCommand}…`;
-    setStatus("還在聽，說完後稍等一下就會執行…");
+  /** 拼圖完成：把湊齊的完整句子一次送進喚醒／指令流程 */
+  function processAssembledWakeSpeech(fullText) {
+    const full = String(fullText || "").trim();
+    if (!full) return;
 
-    if (pendingWakeTimer) clearTimeout(pendingWakeTimer);
-    pendingWakeTimer = setTimeout(() => {
-      pendingWakeTimer = null;
-      const finalCmd = pendingWakeCommand;
-      pendingWakeCommand = "";
-      WakeWord.sleep(wakeSession);
-      els.interim.textContent = "";
-      if (isUnclearCommand(finalCmd)) {
-        askPleaseRepeat();
-      } else {
-        executeCommand(finalCmd);
-      }
-      setTimeout(() => {
-        if (navConfirm.active) return;
-        if (wakeSession.isAwake) return;
-        if (wantListen && listenMode === "wake") {
-          setWakeUi("listening");
-          setBadge("listening", "喚醒監聽");
+    if (navConfirm.active) {
+      els.interim.textContent = `導航確認中：${full}`;
+      if (handleNavConfirmSpeech(full, true)) return;
+    }
+
+    const out = WakeWord.processResult(
+      wakeSession,
+      full,
+      true,
+      onWakeTimeout
+    );
+
+    switch (out.kind) {
+      case "listening":
+        els.interim.textContent = `監聽中：${full}`;
+        break;
+
+      case "woke":
+      case "woke_wait":
+        setBadge("awake", "已喚醒");
+        setWakeUi("awake", "");
+        els.interim.textContent = "已喚醒，請繼續說指令…";
+        setStatus("已喚醒，請繼續說完整指令…");
+        clearPendingWokeWait();
+        {
+          const wake = String(out.wakeWord || wakeSession.wakeWord || "");
+          pendingWokeWaitTimer = setTimeout(() => {
+            pendingWokeWaitTimer = null;
+            if (!wakeSession.isAwake || finalTranscriptCache) return;
+            if (navConfirm.active) return;
+            const name = currentUserLabel();
+            const prefix =
+              name && name !== "你好" ? `${name}，` : "";
+            if (/^你好$|^您好$/.test(wake)) {
+              speakText(`${prefix}你好`);
+            } else {
+              speakText(`${prefix}在！請說完整指令，例如導航或查天氣。`);
+            }
+          }, silenceMs() + 300);
         }
-      }, 800);
-    }, commitMs());
+        break;
+
+      case "command_partial":
+      case "command_final": {
+        const cmd = String(out.coreCommand || "").trim();
+        clearPendingWokeWait();
+        WakeWord.sleep(wakeSession);
+        els.interim.textContent = "";
+        if (isUnclearCommand(cmd)) {
+          askPleaseRepeat();
+        } else {
+          setStatus(`完整指令：『${cmd}』`);
+          executeCommand(cmd);
+        }
+        setTimeout(() => {
+          if (navConfirm.active) return;
+          if (wakeSession.isAwake) return;
+          if (wantListen && listenMode === "wake") {
+            setWakeUi("listening");
+            setBadge("listening", "喚醒監聽");
+          }
+        }, 800);
+        break;
+      }
+
+      default:
+        els.interim.textContent = "";
+        break;
+    }
+  }
+
+  function flushSpeechPuzzle() {
+    silenceTimer = null;
+    let full = String(finalTranscriptCache || "").trim();
+    const interim = String(lastInterimTranscript || "").trim();
+    // 若最後只剩 interim（尚未變 final），一併併入，避免長句尾端被吃掉
+    if (interim) {
+      full = WakeWord.mergeSpeechFragments
+        ? WakeWord.mergeSpeechFragments(full, interim)
+        : `${full}${interim}`;
+    }
+    finalTranscriptCache = "";
+    lastInterimTranscript = "";
+    full = String(full || "").trim();
+    if (!full) return;
+    if (listenMode === "wake") {
+      processAssembledWakeSpeech(full);
+    } else {
+      appendFinal(full);
+      els.interim.textContent = "";
+    }
+  }
+
+  /** 動態拼圖：isFinal 只累積，靜音滿額才送出 */
+  function onSpeechPuzzleResult(event) {
+    let interimTranscript = "";
+    let gotVoice = false;
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      const piece = result[0]?.transcript || "";
+      if (!piece) continue;
+      gotVoice = true;
+      if (result.isFinal) {
+        finalTranscriptCache = WakeWord.mergeSpeechFragments
+          ? WakeWord.mergeSpeechFragments(finalTranscriptCache, piece)
+          : `${finalTranscriptCache}${piece}`;
+        lastInterimTranscript = "";
+      } else {
+        interimTranscript += piece;
+      }
+    }
+    if (interimTranscript) lastInterimTranscript = interimTranscript;
+
+    // 使用者開口時打斷 TTS，避免喇叭回授蓋掉指令（搭配 echoCancellation）
+    if (gotVoice && synth?.speaking) {
+      try {
+        synth.cancel();
+      } catch (_) {}
+      ttsPausedListen = false;
+    }
+
+    const showing = `${finalTranscriptCache || ""}${interimTranscript || lastInterimTranscript || ""}`.trim();
+    if (showing) {
+      els.interim.textContent = `聽取中：${showing}`;
+      setStatus(`聽取中：${showing}`);
+      if (listenMode === "wake" && wakeSession.isAwake) {
+        setBadge("awake", "聽取中");
+        setWakeUi("awake", showing);
+      } else if (listenMode === "wake") {
+        setBadge("listening", "聽取中");
+      } else {
+        setBadge("listening", "聽寫中");
+      }
+    }
+
+    if (!finalTranscriptCache && !interimTranscript && !lastInterimTranscript) {
+      return;
+    }
+
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => {
+      if (
+        String(finalTranscriptCache || "").trim() ||
+        String(lastInterimTranscript || "").trim()
+      ) {
+        flushSpeechPuzzle();
+      } else {
+        silenceTimer = null;
+      }
+    }, silenceMs());
   }
 
   /** 說完／打斷後開啟續聽，使用者說話小一就回話 */
@@ -1996,88 +2118,14 @@
     els.interim.textContent = "";
   }
 
+  /** 舊路徑相容：片段已改由 onSpeechPuzzleResult 拼圖後再處理 */
   function handleWakeResult(result) {
-    const transcript = result[0].transcript;
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'wake-ui',hypothesisId:'C',location:'voice_studio.js:handleWakeResult',message:'wake speech result',data:{transcript:String(transcript||'').slice(0,60),isFinal:result.isFinal,wantListen,listening,isAwake:wakeSession.isAwake,navConfirmActive:navConfirm.active,wakeStatus:els.wakeStatus?.textContent||'',btnWake:els.btnWake?.textContent||''},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
-    // 導航確認中：優先處理「對／不對」與改地名
-    if (navConfirm.active) {
-      els.interim.textContent = `導航確認中：${transcript}`;
-      if (handleNavConfirmSpeech(transcript, result.isFinal)) {
-        return;
-      }
-      if (!result.isFinal) return;
+    if (!result?.[0]?.transcript) return;
+    if (!result.isFinal) {
+      els.interim.textContent = `聽取中：${result[0].transcript}`;
+      return;
     }
-
-    const out = WakeWord.processResult(
-      wakeSession,
-      transcript,
-      result.isFinal,
-      onWakeTimeout
-    );
-
-    switch (out.kind) {
-      case "listening":
-        els.interim.textContent = `監聽中：${transcript}`;
-        break;
-
-      case "woke":
-      case "woke_wait":
-        setBadge("awake", "已喚醒");
-        setWakeUi("awake", "");
-        els.interim.textContent = "已喚醒，請繼續說指令（可分開說）…";
-        setStatus("已喚醒，請繼續說完整指令…");
-        // 延遲追問：避免 Android 把「小一小一＋指令」切段時，先回覆打斷後半句
-        if (out.kind === "woke_wait" && result.isFinal) {
-          clearPendingWokeWait();
-          const wake = String(out.wakeWord || wakeSession.wakeWord || "");
-          pendingWokeWaitTimer = setTimeout(() => {
-            pendingWokeWaitTimer = null;
-            if (pendingWakeCommand || !wakeSession.isAwake) return;
-            if (navConfirm.active) return;
-            const name = currentUserLabel();
-            const prefix =
-              name && name !== "你好" ? `${name}，` : "";
-            if (/^你好$|^您好$/.test(wake)) {
-              speakText(`${prefix}你好`);
-            } else {
-              speakText(`${prefix}在！請說完整指令，例如導航或查天氣。`);
-            }
-          }, commitMs() + 400);
-        }
-        break;
-
-      case "command_partial":
-        scheduleWakeCommandCommit(
-          out.coreCommand,
-          out.wakeWord || wakeSession.wakeWord
-        );
-        // interim 也延長等待；final 再重設計時器湊齊後段
-        if (!result.isFinal && out.coreCommand) {
-          setBadge("awake", "聽取中");
-          setWakeUi("awake", out.coreCommand);
-          els.interim.textContent = `聽取中：${out.coreCommand}…`;
-        }
-        break;
-
-      case "command_final":
-        // 相容舊路徑：同樣走延遲確認
-        scheduleWakeCommandCommit(
-          out.coreCommand,
-          out.wakeWord || wakeSession.wakeWord
-        );
-        break;
-
-      default:
-        if (!result.isFinal && transcript) {
-          els.interim.textContent = wakeSession.isAwake
-            ? `已喚醒｜${transcript}`
-            : `監聽中：${transcript}`;
-        }
-        break;
-    }
+    processAssembledWakeSpeech(result[0].transcript);
   }
 
   function waitVoices() {
@@ -2221,33 +2269,10 @@
       if (generation !== listenGeneration) return;
       // #region agent log
       const _last = event.results[event.results.length - 1];
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F4',location:'voice_studio.js:onresult',message:'got speech result',data:{listenMode,isFinal:_last?.isFinal,transcript:(_last?.[0]?.transcript||'').slice(0,60),resultIndex:event.resultIndex,len:event.results.length},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F4',location:'voice_studio.js:onresult',message:'speech puzzle piece',data:{listenMode,isFinal:_last?.isFinal,transcript:(_last?.[0]?.transcript||'').slice(0,60),cache:String(finalTranscriptCache||'').slice(0,80),resultIndex:event.resultIndex,len:event.results.length},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
-
-      if (listenMode === "wake") {
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          handleWakeResult(event.results[i]);
-        }
-        return;
-      }
-
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result[0].transcript;
-        if (result.isFinal) {
-          appendFinal(transcript);
-          els.interim.textContent = tagState.buffer
-            ? `累積中：${tagState.buffer}…`
-            : "";
-        } else {
-          interim += transcript;
-        }
-      }
-      if (interim) {
-        const pending = tagState.buffer ? `${tagState.buffer} ` : "";
-        els.interim.textContent = `辨識中：${pending}${interim}`;
-      }
+      // 手機 isFinal 過敏感：一律走拼圖快取，靜音後再執行
+      onSpeechPuzzleResult(event);
     };
 
     rec.onerror = (event) => {
@@ -2293,10 +2318,13 @@
       fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F5',location:'voice_studio.js:onend',message:'recognition ended',data:{wantListen,listenMode,skipRestart,willRestart:wantListen&&!skipRestart,synthSpeaking:synth.speaking,isAwake:wakeSession.isAwake,generation},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       updateListenButtons();
-      if (listenMode === "dictation") {
+      if (listenMode === "dictation" && !finalTranscriptCache) {
         AutoTag.flushBuffer(tagState, onFlushRaw);
       }
-      els.interim.textContent = "";
+      // 辨識重啟時若拼圖尚有內容，保留給靜音計時器送出；勿立刻清空
+      if (!finalTranscriptCache) {
+        els.interim.textContent = "";
+      }
       if (wantListen && !skipRestart) {
         const restartDelay = isMobileOrTwa() ? 120 : 350;
         setTimeout(() => {
@@ -2509,7 +2537,7 @@
   function stopListen() {
     wantListen = false;
     ttsPausedListen = false;
-    clearPendingWakeCommit();
+    clearSpeechPuzzle();
     clearPendingWokeWait();
     WakeWord.sleep(wakeSession);
     if (recognition) {
