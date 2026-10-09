@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=80" />
+    <link rel="stylesheet" href="voice_studio.css?v=81" />
   </head>
   <body class="auth-locked">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -253,7 +253,7 @@
 
         <section class="hero" id="hero">
           <h1 id="heroGreeting">想做什麼嗎？</h1>
-          <p class="hero-sub">語音喚醒小一 · Gemini 糾錯 · 導航／天氣／計算</p>
+          <p class="hero-sub">語音喚醒 · 看圖提問 · 導航／天氣／計算</p>
         </section>
 
         <section class="chat-wrap">
@@ -279,6 +279,19 @@
         </section>
 
         <section class="composer-wrap">
+          <div id="imagePreviewZone" class="image-preview-zone" hidden>
+            <img id="previewImg" class="image-preview" alt="已選圖片預覽" />
+            <button
+              type="button"
+              id="clearImgBtn"
+              class="image-clear-btn"
+              title="清除圖片"
+              aria-label="清除圖片"
+            >
+              ✕
+            </button>
+          </div>
+
           <div class="mic-meter" aria-label="麥克風音量">
             <div class="mic-meter-bar">
               <div id="micLevelFill" class="mic-meter-fill"></div>
@@ -286,14 +299,30 @@
             <span id="micMeterHint" class="mic-meter-hint">安靜</span>
           </div>
 
+          <input type="file" id="imageInput" accept="image/*" hidden />
+
           <form id="promptForm" class="composer" autocomplete="off">
             <button type="button" id="btnClear" class="composer-plus" title="清空">
               +
             </button>
+            <button
+              type="button"
+              id="uploadImgBtn"
+              class="photo-btn"
+              title="拍照或從相簿選圖，再語音／打字提問"
+              aria-label="傳照片"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M9 3 7.17 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.17L15 3H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2A2.8 2.8 0 1 0 12 10a2.8 2.8 0 0 0 0 5.8z"
+                />
+              </svg>
+            </button>
             <input
               id="promptInput"
               type="text"
-              placeholder="打字問小一，按傳送；或按麥克風用語音…"
+              placeholder="可先傳照片，再打字或用語音問小一…"
               enterkeyhint="send"
             />
             <button type="button" id="modelChip" class="model-chip" title="目前模型">
@@ -433,9 +462,9 @@
     <script src="auth.js?v=80"></script>
     <script src="auto_tag.js?v=42"></script>
     <script src="wake_word.js?v=72"></script>
-    <script src="gemini_tagger.js?v=68"></script>
+    <script src="gemini_tagger.js?v=81"></script>
     <script type="module" src="webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=80"></script>
+    <script src="voice_studio.js?v=81"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

@@ -83,7 +83,15 @@
     authHint: document.getElementById("authHint"),
     authAccountLabel: document.getElementById("authAccountLabel"),
     btnLogout: document.getElementById("btnLogout"),
+    imageInput: document.getElementById("imageInput"),
+    uploadImgBtn: document.getElementById("uploadImgBtn"),
+    imagePreviewZone: document.getElementById("imagePreviewZone"),
+    previewImg: document.getElementById("previewImg"),
+    clearImgBtn: document.getElementById("clearImgBtn"),
   };
+
+  /** @type {{ mimeType: string, data: string } | null} */
+  let pendingVisionImage = null;
 
   /** @type {'login' | 'register' | 'forgot'} */
   let authMode = "login";
@@ -1951,17 +1959,120 @@
     }
   }
 
+  function clearPendingVisionImage() {
+    pendingVisionImage = null;
+    if (els.imageInput) els.imageInput.value = "";
+    if (els.previewImg) els.previewImg.removeAttribute("src");
+    if (els.imagePreviewZone) {
+      els.imagePreviewZone.hidden = true;
+      els.imagePreviewZone.setAttribute("hidden", "");
+    }
+    els.uploadImgBtn?.classList.remove("has-image");
+  }
+
+  /** 壓縮圖片後轉成 Gemini inlineData（上限約 1280px） */
+  function fileToVisionImage(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !String(file.type || "").startsWith("image/")) {
+        reject(new Error("請選擇圖片檔"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("讀取圖片失敗"));
+      reader.onload = () => {
+        const dataUrl = String(reader.result || "");
+        const img = new Image();
+        img.onerror = () => reject(new Error("圖片無法預覽"));
+        img.onload = () => {
+          const maxSide = 1280;
+          let { width, height } = img;
+          if (width > maxSide || height > maxSide) {
+            const scale = maxSide / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("無法處理圖片"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const out = canvas.toDataURL("image/jpeg", 0.85);
+          const parts = out.split(",");
+          const data = parts[1] || "";
+          if (!data) {
+            reject(new Error("圖片轉換失敗"));
+            return;
+          }
+          resolve({
+            mimeType: "image/jpeg",
+            data,
+            previewUrl: out,
+          });
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function bindVisionImageUi() {
+    els.uploadImgBtn?.addEventListener("click", () => {
+      els.imageInput?.click();
+    });
+    els.clearImgBtn?.addEventListener("click", () => {
+      clearPendingVisionImage();
+      setStatus("已清除圖片");
+    });
+    els.imageInput?.addEventListener("change", async () => {
+      const file = els.imageInput?.files?.[0];
+      if (!file) return;
+      try {
+        setStatus("圖片處理中…");
+        const vision = await fileToVisionImage(file);
+        pendingVisionImage = {
+          mimeType: vision.mimeType,
+          data: vision.data,
+        };
+        if (els.previewImg) els.previewImg.src = vision.previewUrl;
+        if (els.imagePreviewZone) {
+          els.imagePreviewZone.hidden = false;
+          els.imagePreviewZone.removeAttribute("hidden");
+        }
+        els.uploadImgBtn?.classList.add("has-image");
+        setStatus("圖片已就緒，請語音或打字提問");
+      } catch (err) {
+        clearPendingVisionImage();
+        setStatus(`圖片失敗：${err?.message || err}`);
+      }
+    });
+  }
+
   /** Gemini 小一大腦：糾錯＋ACTION＋語音回覆；失敗時拋錯改走本機 */
   async function executeViaGemini(command) {
-    setStatus("小一思考中（Gemini）…");
+    setStatus(
+      pendingVisionImage ? "小一看圖思考中（Gemini）…" : "小一思考中（Gemini）…"
+    );
     const locText = await resolveLocationTextForGemini();
-    const result = await window.GeminiTagger.assist(command, locText);
+    const vision = pendingVisionImage
+      ? { mimeType: pendingVisionImage.mimeType, data: pendingVisionImage.data }
+      : null;
+    const result = await window.GeminiTagger.assist(command, locText, {
+      image: vision,
+    });
+    // 成功後清除，避免下次誤帶舊圖
+    if (vision) clearPendingVisionImage();
     const actions = result.actions || [];
     const speak = result.speak || "";
 
     writeTagged(
       AutoTag.withTimeline(
-        `[🧠 Gemini｜${actions.map((a) => a.type).join(",") || "對話"}] ${command}`,
+        `[🧠 Gemini｜${actions.map((a) => a.type).join(",") || "對話"}${
+          vision ? "｜看圖" : ""
+        }] ${command}`,
         {
           sessionStartAt: tagState.sessionStartAt,
           lineIndex: tagState.lineIndex++,
@@ -2141,20 +2252,35 @@
     const prevSilent = silentChat;
     if (options.silent) silentChat = true;
     try {
+      const hasVision = Boolean(pendingVisionImage?.data);
       const intent = WakeWord.classifyCommand(command);
-      const line = `[🎯 指令｜${intent.label}] ${command}`;
+      const line = `[🎯 指令｜${intent.label}${hasVision ? "｜看圖" : ""}] ${command}`;
       const tagged = AutoTag.withTimeline(line, {
         sessionStartAt: tagState.sessionStartAt,
         lineIndex: tagState.lineIndex++,
       });
       writeTagged(tagged);
-      appendChatBubble("user", command);
+      appendChatBubble(
+        "user",
+        hasVision ? `🖼 ${command}` : command
+      );
       setWakeUi("done", command);
       setStatus(
         options.silent
           ? `文字對話：『${command}』`
           : `已擷取核心命令：『${command}』`
       );
+
+      // 有附圖時一律走 Gemini 看圖（自我介紹等也不擋）
+      if (hasVision && window.GeminiTagger?.apiKeyPresent?.()) {
+        try {
+          await executeViaGemini(command);
+          return;
+        } catch (err) {
+          setStatus(`看圖失敗：${err?.message || err}`);
+          return;
+        }
+      }
 
       // 自我介紹／招呼／清空／朗讀：本機秒回
       if (
@@ -2847,9 +2973,12 @@
 
   els.promptForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const q = String(els.promptInput?.value || "").trim();
+    let q = String(els.promptInput?.value || "").trim();
+    if (!q && pendingVisionImage) {
+      q = "請看這張圖，告訴我重點";
+    }
     if (!q) {
-      setStatus("請輸入內容後按傳送，或按麥克風用語音");
+      setStatus("請輸入內容、傳照片，或按麥克風用語音");
       return;
     }
     pauseWakeForTyping("文字對話中，已停止喚醒監聽");
@@ -3171,6 +3300,7 @@
   else window.addEventListener("webllm-tagger-ready", bindAi, { once: true });
   bindAi();
   initChromeUi();
+  bindVisionImageUi();
   setWakeUi("idle");
   loadVoices();
   syncAuthUiMode();

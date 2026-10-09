@@ -38,7 +38,11 @@
    - 標籤：[ACTION_YOUTUBE:修正後的極準播放關鍵字]
 6. 自我介紹（請介紹自己、你是誰、你會什麼、有什麼功能）：
    - 不要輸出 ACTION 標籤。
-   - 請口語介紹：名字叫小一、是使用者的好朋友；可查天氣、導航、計算，也能幫忙播放音樂與影片，並可用語音或打字對話。
+   - 請口語介紹：名字叫小一、是使用者的好朋友；可查天氣、導航、計算，也能幫忙播放音樂與影片，並可用語音或打字對話，還能看圖回答問題。
+7. 看圖辨識（使用者附上圖片時）：請結合圖片視覺內容與文字／語音指令綜合回答。
+   - 一般看圖問答（這是什麼、翻譯、熱量、怎麼煮）：不要輸出 ACTION，直接口語精簡回答。
+   - 依圖導航（導航去這裡、怎麼走到照片裡的地方）：輸出 [ACTION_NAV:從圖片辨識出的精準地點] 再接口語回覆。
+   - 依圖找 YouTube（找開箱、找教學）：輸出 [ACTION_YOUTUBE:關鍵字] 再接回覆。
 
 # 輸出範例
 使用者：「小一小一導航去逢甲葉式」
@@ -159,11 +163,15 @@
     return { actions, speak, raw: text };
   }
 
+  /**
+   * @param {{ userText: string, systemInstruction?: string, temperature?: number, maxOutputTokens?: number, image?: { mimeType: string, data: string } | null }} opts
+   */
   async function callGeminiStudio({
     userText,
     systemInstruction,
     temperature = 0.3,
     maxOutputTokens = 256,
+    image = null,
   }) {
     const key = apiKey();
     const model = modelId();
@@ -171,8 +179,19 @@
       model
     )}:generateContent`;
 
+    const parts = [];
+    if (image?.data && image?.mimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: String(image.mimeType),
+          data: String(image.data),
+        },
+      });
+    }
+    parts.push({ text: userText });
+
     const body = {
-      contents: [{ role: "user", parts: [{ text: userText }] }],
+      contents: [{ role: "user", parts }],
       generationConfig: {
         temperature,
         maxOutputTokens,
@@ -202,8 +221,8 @@
       throw err;
     }
 
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    return parts.map((p) => p.text || "").join("").trim();
+    const outParts = data?.candidates?.[0]?.content?.parts || [];
+    return outParts.map((p) => p.text || "").join("").trim();
   }
 
   async function tag(text) {
@@ -245,13 +264,15 @@ ${original}`;
   }
 
   /**
-   * 小一大腦：糾錯＋ACTION 標籤＋口語回覆
+   * 小一大腦：糾錯＋ACTION 標籤＋口語回覆（可附圖片多模態）
    * @param {string} userText
    * @param {string} [locationText] 例："24.81, 120.97（新竹）"
+   * @param {{ image?: { mimeType: string, data: string } | null }} [options]
    */
-  async function assist(userText, locationText) {
+  async function assist(userText, locationText, options = {}) {
     const original = String(userText || "").trim();
-    if (!original) {
+    const image = options?.image || null;
+    if (!original && !image?.data) {
       return { actions: [], speak: "", raw: "" };
     }
     if (!apiKey()) {
@@ -266,13 +287,17 @@ ${original}`;
       /\[CONTEXT_LOCATION\]/g,
       loc
     );
+    const promptText =
+      original ||
+      "請仔細看這張圖片，用口語繁體中文告訴我重點內容。";
 
     try {
       const answer = await callGeminiStudio({
-        userText: original,
+        userText: promptText,
         systemInstruction,
         temperature: 0.35,
-        maxOutputTokens: 320,
+        maxOutputTokens: image?.data ? 480 : 320,
+        image,
       });
       status = "ready";
       lastError = "";
