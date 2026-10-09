@@ -3719,20 +3719,12 @@
       return;
     }
     setStatus(`原生喚醒：${text}`);
-    // 確保喚醒監聽開啟，方便後續續說
-    if (!wantListen) {
-      try {
-        await startListen("wake", false);
-      } catch (_) {}
-    }
-    // 交給既有指令管線（含喚醒詞裁切）
     const stripped =
       typeof WakeWord?.stripWakePrefix === "function"
         ? WakeWord.stripWakePrefix(text)
         : text;
     const core = String(stripped || text).trim();
     if (!core || isUnclearCommand(core)) {
-      // 只有喚醒詞 → 打招呼／請下指令
       const out = WakeWord.processResult(
         wakeSession,
         text,
@@ -3744,13 +3736,78 @@
         const prefix = name && name !== "你好" ? `${name}，` : "";
         speakText(`${prefix}在！請說指令。`);
       } else if (out.kind === "command_partial" || out.kind === "command_final") {
-        await executeCommand(out.coreCommand || core);
+        await sendAudioToGeminiViaText(out.coreCommand || core);
       } else {
         speakText("在！請說指令。");
       }
       return;
     }
-    await executeCommand(core);
+    await sendAudioToGeminiViaText(core);
+  }
+
+  /**
+   * Android 原生前台服務喚醒專用：純文字指令 → Gemini 理解 → 回覆／執行動作
+   * （導航／天氣／搜尋／YouTube 等）
+   */
+  async function sendAudioToGeminiViaText(rawText) {
+    const command = String(rawText || "").trim();
+    if (!command) return;
+    setWakeUi("done", command);
+    setStatus(`小一思考中（Gemini）：${command}`);
+    if (window.GeminiTagger?.apiKeyPresent?.()) {
+      try {
+        await executeCommand(command);
+        return;
+      } catch (err) {
+        setStatus(`Gemini 失敗，改本機處理：${err?.message || err}`);
+      }
+    }
+    await executeCommand(command);
+  }
+
+  /** 供 Android WebView evaluateJavascript 呼叫 */
+  window.executeCommandFromAndroid = function (rawText) {
+    const text = String(rawText || "").trim();
+    if (!text) return;
+    console.log("[Android native wake]", text.slice(0, 80));
+    const clean = text.replace(/[\s，。？、！!]/g, "");
+    let command = text;
+    const wakes = ["小一小一", "小一小醫", "小一小依", "小一小伊", "你好", "您好"];
+    for (const w of wakes) {
+      const cw = w.replace(/\s/g, "");
+      const idx = clean.indexOf(cw);
+      if (idx >= 0) {
+        command = clean.slice(idx + cw.length) || text;
+        break;
+      }
+    }
+    if (typeof WakeWord?.stripWakePrefix === "function") {
+      command = WakeWord.stripWakePrefix(text) || command;
+    }
+    command = String(command || "").trim();
+    const run = () => {
+      if (!command || isUnclearCommand(command)) {
+        speakText("在！請說指令。");
+        setStatus("已喚醒，請說指令");
+        return;
+      }
+      sendAudioToGeminiViaText(command).catch((err) => {
+        setStatus(`原生指令失敗：${err?.message || err}`);
+      });
+    };
+    if (document.body?.classList?.contains("auth-locked")) {
+      setStatus("您好像沒有登入，請先登入後再使用語音助理");
+      try {
+        speakText("您好像沒有登入，請先登入後再使用語音助理。");
+      } catch (_) {}
+      return;
+    }
+    run();
+  };
+  if (window.__pendingAndroidCmd) {
+    const pending = window.__pendingAndroidCmd;
+    window.__pendingAndroidCmd = "";
+    setTimeout(() => window.executeCommandFromAndroid(pending), 400);
   }
 
   if (window.WebLLMTagger) bindAi();
