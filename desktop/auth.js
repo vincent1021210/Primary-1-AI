@@ -93,6 +93,17 @@
     return global.APP_CONFIG || {};
   }
 
+  /**
+   * 手機版：永久保持登入（localStorage + IndexedDB）
+   * 網頁版：僅本次分頁有效（sessionStorage；刷新需重登）
+   * 由各入口頁設定 window.XIAO_YI_PLATFORM = "mobile" | "desktop"
+   */
+  function preferPersistentLogin() {
+    if (cfg().persistentLogin === true) return true;
+    if (cfg().persistentLogin === false) return false;
+    return String(global.XIAO_YI_PLATFORM || "").toLowerCase() === "mobile";
+  }
+
   function authUrl() {
     return String(cfg().appsScriptAuthUrl || "").trim();
   }
@@ -131,13 +142,24 @@
   }
 
   function loadSession() {
-    // 永久保持登入：優先 localStorage
+    // 網頁版：只讀本次分頁的 sessionStorage（刷新即失效）
+    if (!preferPersistentLogin()) {
+      try {
+        const temp = parseSessionRaw(
+          sessionStorage.getItem(TEMP_SESSION_KEY),
+          () => sessionStorage.removeItem(TEMP_SESSION_KEY)
+        );
+        if (temp) return { ...temp, persistent: false };
+      } catch (_) {}
+      return null;
+    }
+
+    // 手機版：永久保持登入
     const persistent = parseSessionRaw(localStorage.getItem(STORAGE_KEY), () =>
       localStorage.removeItem(STORAGE_KEY)
     );
     if (persistent) return { ...persistent, persistent: true };
 
-    // 相容舊版暫存（升級寫入 localStorage）
     try {
       const temp = parseSessionRaw(sessionStorage.getItem(TEMP_SESSION_KEY), () =>
         sessionStorage.removeItem(TEMP_SESSION_KEY)
@@ -150,8 +172,11 @@
     return null;
   }
 
-  /** 非同步：IndexedDB → localStorage（Android 關閉 App 後仍可還原） */
+  /** 手機：IndexedDB → localStorage；網頁：僅 sessionStorage */
   async function loadSessionAsync() {
+    if (!preferPersistentLogin()) {
+      return loadSession();
+    }
     try {
       const idbRaw = await idbGet(STORAGE_KEY);
       const fromIdb = parseSessionRaw(
@@ -168,7 +193,10 @@
     return loadSession();
   }
 
-  /** 永久寫入 localStorage + IndexedDB；僅登出才清除 */
+  /**
+   * 手機：寫入 localStorage + IndexedDB（關閉 App 仍在）
+   * 網頁：只寫 sessionStorage（刷新需重登；不覆寫手機永久登入）
+   */
   function saveSession(session) {
     if (!session?.token) {
       clearSession();
@@ -182,15 +210,25 @@
       backend: session.backend || (useRemote() ? "appscript" : "local"),
     };
     const payload = JSON.stringify(data);
-    try {
-      localStorage.setItem(STORAGE_KEY, payload);
-    } catch (_) {}
-    idbSet(STORAGE_KEY, payload).catch(() => {});
-    try {
-      sessionStorage.removeItem(TEMP_SESSION_KEY);
-    } catch (_) {}
+    const persistent = preferPersistentLogin();
+
+    if (persistent) {
+      try {
+        localStorage.setItem(STORAGE_KEY, payload);
+      } catch (_) {}
+      idbSet(STORAGE_KEY, payload).catch(() => {});
+      try {
+        sessionStorage.removeItem(TEMP_SESSION_KEY);
+      } catch (_) {}
+    } else {
+      try {
+        sessionStorage.setItem(TEMP_SESSION_KEY, payload);
+      } catch (_) {}
+      // 網頁版不清除手機版的永久登入殘留，避免同瀏覽器互相踢掉
+    }
   }
 
+  /** 登出：兩邊工作階段都清（含永久與暫存） */
   function clearSession() {
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -203,7 +241,7 @@
 
   /**
    * 是否允許自動還原登入：
-   * - 有永久 session 可還原時為 true
+   * - 有可用 session 時為 true
    * - 或設定檔明確 autoRestoreLogin: true
    */
   function autoRestoreLogin() {
@@ -651,6 +689,7 @@
     authUrl,
     requireLogin,
     useRemote,
+    preferPersistentLogin,
     sendRegisterCode,
     register,
     login,

@@ -555,7 +555,7 @@
         ? "答對安全問題即可在本機重設密碼（無需寄信）"
         : isReg
           ? "註冊需 Gmail 驗證碼與安全問題；密碼至少 8 碼"
-          : "登入後會永久保持；關閉 App 仍維持登入，點登出才清除";
+          : "網頁版：刷新頁面需重新登入";
     }
     setAuthError("");
     setAuthOk("");
@@ -636,7 +636,7 @@
     }
     setAuthLocked(true);
     syncAuthUiMode();
-    // IndexedDB + localStorage 雙讀（TWA 關閉 App 後仍可還原）
+    // 網頁版：僅 sessionStorage（刷新不還原）
     const session =
       (await auth.loadSessionAsync?.()) || auth.loadSession?.() || null;
     const allowRestore = Boolean(session?.token);

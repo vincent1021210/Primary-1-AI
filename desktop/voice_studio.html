@@ -434,7 +434,10 @@
     <script src="config.deploy.js?v=68"></script>
     <!-- 本機才有；GitHub Pages 沒有此檔屬正常 -->
     <script src="config.local.js?v=68" onerror="/* optional */"></script>
-    <script src="auth.js?v=80"></script>
+    <script>
+      window.XIAO_YI_PLATFORM = "desktop";
+    </script>
+    <script src="auth.js?v=83"></script>
     <script src="auto_tag.js?v=42"></script>
     <script src="wake_word.js?v=72"></script>
     <script src="gemini_tagger.js?v=81"></script>
