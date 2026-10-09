@@ -183,9 +183,10 @@
       fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'C',location:'auth.js:api:parse-fail',message:'auth response not JSON',data:{action:String(action||''),status:res.status,looksHtml,bodyHead:head},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       throw new Error(
-        looksHtml
+        (looksHtml
           ? "Apps Script 回傳登入／授權頁（非 JSON）。請重新部署網頁應用程式，存取權選「任何人」，並確認網址結尾是 /exec"
-          : "Apps Script 回應不是 JSON，請確認已部署為「任何人可存取」"
+          : "Apps Script 回應不是 JSON，請確認已部署為「任何人可存取」") +
+          `［診斷 status=${res.status} type=${String(res.headers.get("content-type") || "").slice(0, 40)} head=${head.slice(0, 80)}］`
       );
     }
     // #region agent log
