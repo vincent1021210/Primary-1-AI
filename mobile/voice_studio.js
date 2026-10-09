@@ -54,6 +54,9 @@
     voiceAssistantToggle: document.getElementById("voiceAssistantToggle"),
     voiceAssistantToggleMain: document.getElementById("voiceAssistantToggleMain"),
     voiceAssistBarHint: document.getElementById("voiceAssistBarHint"),
+    geminiKeyInput: document.getElementById("geminiKeyInput"),
+    btnSaveGeminiKey: document.getElementById("btnSaveGeminiKey"),
+    geminiKeyHint: document.getElementById("geminiKeyHint"),
     promptForm: document.getElementById("promptForm"),
     promptInput: document.getElementById("promptInput"),
     btnSend: document.getElementById("btnSend"),
@@ -189,11 +192,15 @@
     } catch (_) {}
     syncVoiceAssistantToggles(enabled);
     if (!enabled) {
-      if (wantListen || listening || recognition) stopListen();
+      if (wantListen || listening || recognition || geminiRecording) stopListen();
       setWakeUi("idle");
       setStatus("語音助理已關閉（打開上方開關即可）");
     } else {
-      setStatus("語音助理已開啟，請點麥克風啟動「小一小一」");
+      setStatus(
+        window.GeminiTagger?.apiKeyPresent?.()
+          ? "語音助理已開啟：點麥克風錄音，說完再點一次送出"
+          : "語音助理已開啟，請點麥克風啟動「小一小一」"
+      );
     }
     applyVoiceAssistantUi();
   }
@@ -201,10 +208,13 @@
   function applyVoiceAssistantUi() {
     const on = isVoiceAssistantEnabled();
     syncVoiceAssistantToggles(on);
+    const geminiVoice = Boolean(window.GeminiTagger?.apiKeyPresent?.());
     if (els.voiceAssistBarHint) {
-      els.voiceAssistBarHint.textContent = on
-        ? "開啟中：請點下方麥克風，再喊「小一小一」"
-        : "已關閉：打開開關後才能用語音";
+      els.voiceAssistBarHint.textContent = !on
+        ? "已關閉：打開開關後才能用語音"
+        : geminiVoice
+          ? "開啟中：點麥克風錄音 → Gemini 理解後回覆"
+          : "開啟中：請點下方麥克風，再喊「小一小一」";
     }
     if (els.btnWake) els.btnWake.disabled = !on;
     if (els.btnListen) els.btnListen.disabled = !on;
@@ -221,12 +231,20 @@
     fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'wake-ui',hypothesisId:'A',location:'voice_studio.js:setWakeUi',message:'setWakeUi called',data:{state,preview:String(preview||'').slice(0,40),wantListen,listening,listenMode,navConfirmActive:navConfirm.active,btnWake:els.btnWake?.textContent||'',wakeStatusBefore:els.wakeStatus?.textContent||''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (els.wakeStatus) {
-      const map = {
-        idle: "待命：點麥克風啟動常亮守護後，說「小一小一」",
-        listening: "常亮守護中：隨時可說「小一小一」或「你好」…",
-        awake: "已喚醒：正在聽取核心命令…",
-        done: "已擷取命令",
-      };
+      const geminiVoice = Boolean(window.GeminiTagger?.apiKeyPresent?.());
+      const map = geminiVoice
+        ? {
+            idle: "待命：點麥克風開始錄音，說完再點一次送出給小一",
+            listening: "錄音中… 說完請再點麥克風送出",
+            awake: "小一聽取中（Gemini）…",
+            done: "已處理語音",
+          }
+        : {
+            idle: "待命：點麥克風啟動常亮守護後，說「小一小一」",
+            listening: "常亮守護中：隨時可說「小一小一」或「你好」…",
+            awake: "已喚醒：正在聽取核心命令…",
+            done: "已擷取命令",
+          };
       els.wakeStatus.textContent = map[state] || map.idle;
     }
     if (els.corePreview) {
@@ -2139,34 +2157,243 @@
     });
   }
 
-  /** Gemini 小一大腦：糾錯＋ACTION＋語音回覆；失敗時拋錯改走本機 */
-  async function executeViaGemini(command) {
-    setStatus(
-      pendingVisionImage ? "小一看圖思考中（Gemini）…" : "小一思考中（Gemini）…"
-    );
-    const locText = await resolveLocationTextForGemini();
-    const vision = pendingVisionImage
-      ? { mimeType: pendingVisionImage.mimeType, data: pendingVisionImage.data }
-      : null;
-    const result = await window.GeminiTagger.assist(command, locText, {
-      image: vision,
+  /** @type {MediaRecorder|null} */
+  let geminiRecorder = null;
+  /** @type {MediaStream|null} */
+  let geminiRecStream = null;
+  let geminiRecChunks = [];
+  let geminiRecording = false;
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const s = String(reader.result || "");
+        const i = s.indexOf(",");
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      };
+      reader.onerror = () => reject(new Error("讀取錄音失敗"));
+      reader.readAsDataURL(blob);
     });
-    // 成功後清除，避免下次誤帶舊圖
-    if (vision) clearPendingVisionImage();
+  }
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  /** 將任意錄音解碼後編碼成 WAV（Gemini 官方支援 audio/wav） */
+  async function blobToGeminiAudio(blob, mimeHint) {
+    const mime = String(mimeHint || blob.type || "").split(";")[0].toLowerCase();
+    const geminiNative = [
+      "audio/wav",
+      "audio/mp3",
+      "audio/mpeg",
+      "audio/aiff",
+      "audio/aac",
+      "audio/ogg",
+      "audio/flac",
+      "audio/mp4",
+    ];
+    if (geminiNative.includes(mime) && mime !== "audio/webm") {
+      return { mimeType: mime === "audio/mpeg" ? "audio/mp3" : mime, data: await blobToBase64(blob) };
+    }
+    const ab = await blob.arrayBuffer();
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) {
+      return { mimeType: mime || "audio/webm", data: await blobToBase64(blob) };
+    }
+    const ctx = new Ctx();
+    try {
+      const decoded = await ctx.decodeAudioData(ab.slice(0));
+      const wavBuf = encodeWavFromAudioBuffer(decoded);
+      return { mimeType: "audio/wav", data: arrayBufferToBase64(wavBuf) };
+    } finally {
+      try {
+        await ctx.close();
+      } catch (_) {}
+    }
+  }
+
+  function encodeWavFromAudioBuffer(audioBuffer) {
+    const numChannels = 1;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length;
+    const srcChannels = audioBuffer.numberOfChannels;
+    const samples = new Float32Array(length);
+    for (let i = 0; i < length; i++) {
+      let sum = 0;
+      for (let c = 0; c < srcChannels; c++) {
+        sum += audioBuffer.getChannelData(c)[i];
+      }
+      samples[i] = sum / srcChannels;
+    }
+    const dataSize = length * 2;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    const writeStr = (offset, str) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + dataSize, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, dataSize, true);
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
+    return buffer;
+  }
+
+  function pickRecorderMime() {
+    const candidates = [
+      "audio/mp4",
+      "audio/aac",
+      "audio/ogg;codecs=opus",
+      "audio/webm;codecs=opus",
+      "audio/webm",
+    ];
+    for (const m of candidates) {
+      if (window.MediaRecorder?.isTypeSupported?.(m)) return m;
+    }
+    return "";
+  }
+
+  async function startGeminiVoiceRecord() {
+    if (!window.GeminiTagger?.apiKeyPresent?.()) {
+      throw new Error("尚未設定 Gemini API Key");
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      throw new Error("此裝置不支援錄音");
+    }
+    if (wantListen) stopListen();
+    await releaseScreenWakeLock();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    geminiRecStream = stream;
+    geminiRecChunks = [];
+    const mime = pickRecorderMime();
+    geminiRecorder = mime
+      ? new MediaRecorder(stream, { mimeType: mime })
+      : new MediaRecorder(stream);
+    geminiRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) geminiRecChunks.push(e.data);
+    };
+    geminiRecorder.onstop = () => {
+      const type = geminiRecorder?.mimeType || mime || "audio/webm";
+      const blob = new Blob(geminiRecChunks, { type });
+      geminiRecChunks = [];
+      if (geminiRecStream) {
+        geminiRecStream.getTracks().forEach((t) => t.stop());
+        geminiRecStream = null;
+      }
+      geminiRecorder = null;
+      geminiRecording = false;
+      updateListenButtons();
+      sendRecordingToGemini(blob, type).catch((err) => {
+        setStatus(`語音送出失敗：${err?.message || err}`);
+      });
+    };
+    geminiRecorder.start();
+    geminiRecording = true;
+    await requestScreenWakeLock();
+    try {
+      if (navigator.vibrate) navigator.vibrate(40);
+    } catch (_) {}
+    setStatus("錄音中… 說完再點一次麥克風送出給 Gemini");
+    setBadge("listening", "錄音中");
+    setWakeUi("listening");
+    updateListenButtons();
+  }
+
+  function stopGeminiVoiceRecord() {
+    if (geminiRecorder && geminiRecorder.state !== "inactive") {
+      setStatus("小一聽取中（Gemini）…");
+      setWakeUi("awake");
+      geminiRecorder.stop();
+    }
+  }
+
+  async function sendRecordingToGemini(blob, mimeType) {
+    if (!blob || blob.size < 200) {
+      setStatus("錄音太短，請再說一次");
+      setWakeUi("idle");
+      setBadge("", "就緒");
+      return;
+    }
+    setStatus("小一聽取中（Gemini）…");
+    setBadge("listening", "思考中");
+    setWakeUi("awake");
+    try {
+      const mime = String(mimeType || "audio/webm").split(";")[0] || "audio/webm";
+      const locText = await resolveLocationTextForGemini();
+      const vision = pendingVisionImage
+        ? { mimeType: pendingVisionImage.mimeType, data: pendingVisionImage.data }
+        : null;
+      const audioPayload = await blobToGeminiAudio(blob, mime);
+      const result = await window.GeminiTagger.assist(
+        "請仔細聆聽這段語音，自動忽略雜音、糾正錯字，依系統指令輸出 ACTION 與口語回覆。",
+        locText,
+        { audio: audioPayload, image: vision }
+      );
+      if (vision) clearPendingVisionImage();
+      await applyGeminiAssistResult(result, result.speak || "語音指令", {
+        hadVision: Boolean(vision),
+        fromAudio: true,
+      });
+      setWakeUi("done", result.speak || "");
+    } catch (err) {
+      setStatus(`語音理解失敗：${err?.message || err}`);
+      setBadge("", "就緒");
+      setWakeUi("idle");
+      appendChatBubble(
+        "assistant",
+        `抱歉，沒聽清楚：${err?.message || "請再說一次"}`
+      );
+    }
+  }
+
+  /** 套用 Gemini ACTION／口語回覆（文字或語音共用） */
+  async function applyGeminiAssistResult(result, commandLabel, meta = {}) {
     const actions = result.actions || [];
     const speak = result.speak || "";
+    const command = String(commandLabel || speak || "").trim();
 
     writeTagged(
       AutoTag.withTimeline(
         `[🧠 Gemini｜${actions.map((a) => a.type).join(",") || "對話"}${
-          vision ? "｜看圖" : ""
-        }] ${command}`,
+          meta.hadVision ? "｜看圖" : ""
+        }${meta.fromAudio ? "｜語音" : ""}] ${command}`,
         {
           sessionStartAt: tagState.sessionStartAt,
           lineIndex: tagState.lineIndex++,
         }
       )
     );
+    if (meta.fromAudio) {
+      appendChatBubble("user", "🎙 （語音訊息）");
+    }
 
     let handled = false;
     for (const action of actions) {
@@ -2174,7 +2401,6 @@
       if (!value) continue;
       if (action.type === "NAV") {
         handled = true;
-        // Gemini 已糾錯地名 → 直接導航（免二次確認拖延）
         await runNavigate(value, "driving");
       } else if (action.type === "SEARCH") {
         handled = true;
@@ -2214,9 +2440,6 @@
               ? `${dayHint}天氣`
               : "查天氣"
             : `${value}${dayHint}天氣`;
-        // #region agent log
-        fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'A',location:'voice_studio.js:executeViaGemini:WEATHER',message:'gemini weather action',data:{value,looksLikeCoords,route,dayHint,cmdHasTomorrow:Boolean(dayHint),weatherQuery,command:String(command||'').slice(0,60)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         await runWeatherQuery(weatherQuery);
       } else if (action.type === "YOUTUBE") {
         handled = true;
@@ -2225,7 +2448,6 @@
     }
 
     if (speak) {
-      // 導航／天氣／附近搜尋本身會朗讀 → 避免重複；搜尋／計算／閒聊／YouTube 用 Gemini 回覆
       const skipSpeak = actions.some(
         (a) =>
           a.type === "NAV" ||
@@ -2233,15 +2455,38 @@
           (a.type === "SEARCH" &&
             (/附近|周邊|在地/.test(command) || /附近|周邊/.test(a.value || "")))
       );
-      if (!skipSpeak) speakText(speak);
+      if (!skipSpeak) {
+        speakText(speak);
+      } else {
+        speakText(speak, null, { silent: true });
+      }
+      setStatus(speak);
     } else if (!handled) {
       speakText("好的");
+      setStatus("已處理");
+    } else {
+      setStatus("已執行");
     }
+    setBadge("", "就緒");
+    refreshHeroVisibility();
+  }
+
+  /** Gemini 小一大腦：糾錯＋ACTION＋語音回覆；失敗時拋錯改走本機 */
+  async function executeViaGemini(command) {
     setStatus(
-      actions.length
-        ? `Gemini 已處理：${actions.map((a) => a.type).join("、")}`
-        : "Gemini 已回话"
+      pendingVisionImage ? "小一看圖思考中（Gemini）…" : "小一思考中（Gemini）…"
     );
+    const locText = await resolveLocationTextForGemini();
+    const vision = pendingVisionImage
+      ? { mimeType: pendingVisionImage.mimeType, data: pendingVisionImage.data }
+      : null;
+    const result = await window.GeminiTagger.assist(command, locText, {
+      image: vision,
+    });
+    if (vision) clearPendingVisionImage();
+    await applyGeminiAssistResult(result, command, {
+      hadVision: Boolean(vision),
+    });
   }
 
   function selfIntroReply() {
@@ -2517,13 +2762,21 @@
 
   function updateListenButtons() {
     // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'wake-ui',hypothesisId:'B',location:'voice_studio.js:updateListenButtons',message:'updateListenButtons',data:{wantListen,listening,listenMode,wakeStatus:els.wakeStatus?.textContent||'',beforeBtn:els.btnWake?.textContent||''},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'wake-ui',hypothesisId:'B',location:'voice_studio.js:updateListenButtons',message:'updateListenButtons',data:{wantListen,listening,listenMode,geminiRecording,wakeStatus:els.wakeStatus?.textContent||'',beforeBtn:els.btnWake?.textContent||''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
-    const wakeOn = listenMode === "wake" && (wantListen || listening);
+    const wakeOn =
+      geminiRecording ||
+      (listenMode === "wake" && (wantListen || listening));
     const dictOn = listenMode === "dictation" && (wantListen || listening);
     if (els.btnWake) {
       els.btnWake.classList.toggle("active", wakeOn);
-      els.btnWake.title = wakeOn ? "停止喚醒監聽" : "啟動喚醒監聽";
+      if (window.GeminiTagger?.apiKeyPresent?.()) {
+        els.btnWake.title = geminiRecording
+          ? "停止錄音並送出給 Gemini"
+          : "按一下開始錄音，再說完按一下送出";
+      } else {
+        els.btnWake.title = wakeOn ? "停止喚醒監聽" : "啟動喚醒監聽";
+      }
     }
     if (els.btnListen) {
       els.btnListen.textContent = dictOn ? "停止聽寫" : "一般聽寫";
@@ -2849,6 +3102,19 @@
     clearPendingWokeWait();
     WakeWord.sleep(wakeSession);
     releaseScreenWakeLock();
+    if (geminiRecording && geminiRecorder) {
+      try {
+        geminiRecorder.onstop = null;
+        if (geminiRecorder.state !== "inactive") geminiRecorder.stop();
+      } catch (_) {}
+      geminiRecorder = null;
+      geminiRecording = false;
+      if (geminiRecStream) {
+        geminiRecStream.getTracks().forEach((t) => t.stop());
+        geminiRecStream = null;
+      }
+      geminiRecChunks = [];
+    }
     if (recognition) {
       ignoreEndOnce = true;
       listenGeneration += 1;
@@ -2930,6 +3196,18 @@
   els.btnWake.addEventListener("click", () => {
     if (!isVoiceAssistantEnabled()) {
       setStatus("語音助理已關閉，請到設定開啟");
+      return;
+    }
+    // 手機下載版：麥克風 = 錄音 → 送 Gemini 理解 → 口語回覆／執行動作
+    if (window.GeminiTagger?.apiKeyPresent?.()) {
+      if (geminiRecording) {
+        stopGeminiVoiceRecord();
+        return;
+      }
+      startGeminiVoiceRecord().catch((err) => {
+        setStatus(`無法錄音：${err?.message || err}`);
+        setBadge("", "就緒");
+      });
       return;
     }
     if (wantListen && listenMode === "wake") stopListen();
@@ -3089,6 +3367,47 @@
   els.settingsDrawer?.addEventListener("click", (e) => {
     if (e.target === els.settingsDrawer) closeDrawer(els.settingsDrawer);
   });
+
+  function syncGeminiKeyUi() {
+    const present = Boolean(window.GeminiTagger?.apiKeyPresent?.());
+    if (els.geminiKeyHint) {
+      els.geminiKeyHint.textContent = present
+        ? "已設定：麥克風錄音會送 Gemini 理解並回覆"
+        : "未設定：請貼上金鑰，語音才能送 Gemini";
+    }
+    if (els.geminiKeyInput && !els.geminiKeyInput.value) {
+      try {
+        const k = localStorage.getItem("xiaoYiGeminiApiKey") || "";
+        if (k) els.geminiKeyInput.placeholder = "•••• 已儲存（可貼新金鑰覆蓋）";
+      } catch (_) {}
+    }
+  }
+  els.btnSaveGeminiKey?.addEventListener("click", () => {
+    const key = String(els.geminiKeyInput?.value || "").trim();
+    try {
+      if (key) {
+        localStorage.setItem("xiaoYiGeminiApiKey", key);
+        if (window.APP_CONFIG) window.APP_CONFIG.geminiApiKey = key;
+      } else {
+        localStorage.removeItem("xiaoYiGeminiApiKey");
+        if (window.APP_CONFIG) window.APP_CONFIG.geminiApiKey = "";
+      }
+    } catch (err) {
+      setStatus(`無法儲存金鑰：${err?.message || err}`);
+      return;
+    }
+    if (els.geminiKeyInput) els.geminiKeyInput.value = "";
+    syncGeminiKeyUi();
+    applyVoiceAssistantUi();
+    setWakeUi("idle");
+    setStatus(
+      key
+        ? "Gemini 金鑰已儲存：點麥克風即可錄音送出"
+        : "已清除 Gemini 金鑰"
+    );
+  });
+  syncGeminiKeyUi();
+
   els.modelChip?.addEventListener("click", () => openDrawer(els.toolsDrawer));
 
   els.promptInput?.addEventListener("focus", () => {
@@ -3483,9 +3802,11 @@
       return;
     }
     setStatus(
-      SpeechRecognition
-        ? "就緒：可打字傳送，或按麥克風啟動喚醒監聽"
-        : "此瀏覽器不支援語音辨識，請用打字傳送"
+      window.GeminiTagger?.apiKeyPresent?.()
+        ? "就緒：可打字傳送，或點麥克風錄音送給小一（Gemini）"
+        : SpeechRecognition
+          ? "就緒：可打字傳送，或按麥克風啟動喚醒監聽"
+          : "此瀏覽器不支援語音辨識，請用打字傳送"
     );
   })();
 })();

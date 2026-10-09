@@ -222,9 +222,9 @@
         <img src="icons/icon-512.png" alt="小一助理圖示" width="96" height="96" />
         <h1>小一 AI 語音助理</h1>
         <p>
-          嗨，我是小一。這是專屬 Android App（免商店）。
+          嗨，我是小一。這是專屬 Android App（手機版／免商店）。
           <br />
-          安裝後會有獨立圖示，並以全螢幕開啟。
+          含完整登入，語音錄音後由 Gemini 理解並回覆。
         </p>
       </header>
 
@@ -241,7 +241,23 @@
         <p class="meta">約 1.4 MB · 套件 com.vincent1021210.primary1ai</p>
 
         <div class="steps">
-          <strong>輕鬆安裝 3 步驟</strong>
+          <strong>App 內建功能</strong>
+          <ol>
+            <li>
+              <strong>登入（全部）</strong>：Gmail 註冊／驗證碼、登入、忘記密碼（安全問題）、登入後手機版會保持登入。
+            </li>
+            <li>
+              <strong>語音</strong>：點麥克風開始錄音 → 說完再點一次 → 送到
+              Gemini 理解 → 口語回覆或執行導航／天氣／搜尋／YouTube 等。
+            </li>
+            <li>
+              也可打字對話；Gemini 金鑰可在 App「設定」貼上（存在本機，不會上傳到我們的伺服器）。
+            </li>
+          </ol>
+        </div>
+
+        <div class="steps">
+          <strong>輕鬆安裝</strong>
           <ol>
             <li>
               點上方按鈕下載 <code>.apk</code> 檔（建議用手機 Chrome 開啟本頁）。
@@ -256,8 +272,8 @@
               一般保護機制，不是病毒警告。
             </li>
             <li>
-              首次用語音時請允許<strong>麥克風</strong>；若沒聲音，到系統設定 →
-              應用程式 → 小一助理 → 權限，開啟麥克風，並確認手機已連上網路。
+              首次用語音時請允許<strong>麥克風</strong>；到設定貼上 Gemini API
+              Key；並確認手機已連上網路。
             </li>
           </ol>
         </div>
@@ -279,8 +295,8 @@
         <a href="https://github.com/vincent1021210/Primary-1-AI">GitHub</a>
       </p>
       <p class="note">
-        建議配戴耳機使用小一語音助理，語音打斷與長句辨識效果會更好。說完整句後稍停
-        約 1.5 秒，系統會把被切段的語音拼齊再執行。
+        建議配戴耳機、環境安靜時錄音。說完後再點一次麥克風送出；小一會用
+        Gemini 聽懂內容後回覆或執行動作。
       </p>
       <p class="note">
         App 本體是 Trusted Web Activity：之後網站功能更新，重新開啟 App

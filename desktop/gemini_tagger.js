@@ -15,7 +15,7 @@
   ];
 
   const ASSIST_SYSTEM_PROMPT = `# 角色設定
-你是一位高 EQ、語氣溫柔且極具智慧的個人語音助理，名字叫「小一」。你負責接收使用者透過麥克風轉換出來的破碎、含糊或帶有錯字的文字，並將其轉化為精準的動作指令與極其自然的擬真語音回覆。
+你是一位高 EQ、語氣溫柔且極具智慧的個人語音助理，名字叫「小一」。你負責接收使用者透過麥克風錄下的語音（或破碎、含糊、帶錯字的文字），聆聽／理解後轉化為精準的動作指令與極其自然的擬真語音回覆。
 
 # 當前環境脈絡 (重要)
 - 使用者目前所在的即時 GPS 座標：[CONTEXT_LOCATION]（格式：緯度, 經度）
@@ -164,7 +164,7 @@
   }
 
   /**
-   * @param {{ userText: string, systemInstruction?: string, temperature?: number, maxOutputTokens?: number, image?: { mimeType: string, data: string } | null }} opts
+   * @param {{ userText: string, systemInstruction?: string, temperature?: number, maxOutputTokens?: number, image?: { mimeType: string, data: string } | null, audio?: { mimeType: string, data: string } | null }} opts
    */
   async function callGeminiStudio({
     userText,
@@ -172,6 +172,7 @@
     temperature = 0.3,
     maxOutputTokens = 256,
     image = null,
+    audio = null,
   }) {
     const key = apiKey();
     const model = modelId();
@@ -180,6 +181,14 @@
     )}:generateContent`;
 
     const parts = [];
+    if (audio?.data && audio?.mimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: String(audio.mimeType),
+          data: String(audio.data),
+        },
+      });
+    }
     if (image?.data && image?.mimeType) {
       parts.push({
         inlineData: {
@@ -188,7 +197,7 @@
         },
       });
     }
-    parts.push({ text: userText });
+    if (userText) parts.push({ text: userText });
 
     const body = {
       contents: [{ role: "user", parts }],
@@ -264,15 +273,16 @@ ${original}`;
   }
 
   /**
-   * 小一大腦：糾錯＋ACTION 標籤＋口語回覆（可附圖片多模態）
+   * 小一大腦：糾錯＋ACTION 標籤＋口語回覆（可附圖片／語音多模態）
    * @param {string} userText
    * @param {string} [locationText] 例："24.81, 120.97（新竹）"
-   * @param {{ image?: { mimeType: string, data: string } | null }} [options]
+   * @param {{ image?: { mimeType: string, data: string } | null, audio?: { mimeType: string, data: string } | null }} [options]
    */
   async function assist(userText, locationText, options = {}) {
     const original = String(userText || "").trim();
     const image = options?.image || null;
-    if (!original && !image?.data) {
+    const audio = options?.audio || null;
+    if (!original && !image?.data && !audio?.data) {
       return { actions: [], speak: "", raw: "" };
     }
     if (!apiKey()) {
@@ -287,17 +297,23 @@ ${original}`;
       /\[CONTEXT_LOCATION\]/g,
       loc
     );
-    const promptText =
-      original ||
-      "請仔細看這張圖片，用口語繁體中文告訴我重點內容。";
+    let promptText = original;
+    if (!promptText && audio?.data) {
+      promptText =
+        "請仔細聆聽這段語音。自動忽略雜音、糾正錯字，依系統指令輸出 ACTION 標籤與口語繁體中文回覆。";
+    }
+    if (!promptText && image?.data) {
+      promptText = "請仔細看這張圖片，用口語繁體中文告訴我重點內容。";
+    }
 
     try {
       const answer = await callGeminiStudio({
         userText: promptText,
         systemInstruction,
         temperature: 0.35,
-        maxOutputTokens: image?.data ? 480 : 320,
+        maxOutputTokens: audio?.data || image?.data ? 480 : 320,
         image,
+        audio,
       });
       status = "ready";
       lastError = "";

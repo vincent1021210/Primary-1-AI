@@ -252,7 +252,7 @@
           <label class="voice-assist-bar compact" for="voiceAssistantToggleMain">
             <span class="voice-assist-bar-text">
               <strong>語音助理</strong>
-              <small id="voiceAssistBarHint">開啟後點麥克風喊「小一小一」</small>
+              <small id="voiceAssistBarHint">開啟後點麥克風錄音，送 Gemini 理解回覆</small>
             </span>
             <input
               type="checkbox"
@@ -263,7 +263,7 @@
             />
           </label>
           <p id="wakeStatus" class="wake-line">
-            待命：說「小一小一」或「你好」後再下指令
+            待命：點麥克風錄音，說完再點一次送出給小一
           </p>
           <span id="corePreview" class="core-preview"></span>
         </header>
@@ -394,7 +394,7 @@
               type="button"
               id="btnWake"
               class="mic-btn"
-              title="啟動／停止喚醒監聽"
+              title="點一下開始錄音，說完再點一次送出"
             >
               <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
                 <path
@@ -404,10 +404,9 @@
               </svg>
             </button>
           </form>
-          <p id="status" class="status">說「小一小一」或「你好」開始</p>
+          <p id="status" class="status">點麥克風開始錄音，說完再點一次</p>
           <p class="voice-tip">
-            建議配戴耳機使用，長句辨識與語音打斷效果會更好；說完後請稍停約
-            1.5 秒再等小一回應。
+            語音會錄下後交給 Gemini 理解並回覆；建議配戴耳機，環境安靜時效果更好。
           </p>
           <p class="disclaimer">小一是 AI，有時可能會出錯。</p>
         </section>
@@ -452,7 +451,7 @@
             <label class="setting-switch" for="voiceAssistantToggle">
               <span class="setting-switch-text">
                 <strong>語音助理</strong>
-                <small>開啟後可喚醒「小一小一」與語音聽寫</small>
+                <small>開啟後可錄音送給 Gemini 理解並回覆</small>
               </span>
               <input
                 type="checkbox"
@@ -462,6 +461,24 @@
                 aria-checked="true"
               />
             </label>
+            <div class="field" style="margin: 10px 0 4px">
+              <label for="geminiKeyInput">Gemini API Key（存在本機）</label>
+              <div class="row" style="gap: 8px; align-items: center">
+                <input
+                  id="geminiKeyInput"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="貼上金鑰後按儲存"
+                  style="flex: 1; min-width: 0"
+                />
+                <button type="button" id="btnSaveGeminiKey" class="ghost-btn">
+                  儲存
+                </button>
+              </div>
+              <small id="geminiKeyHint" class="hint" style="display: block; margin-top: 4px"
+                >未設定時語音無法送 Gemini</small
+              >
+            </div>
             <div class="row">
               <div class="field">
                 <label for="lang">語言</label>
@@ -491,7 +508,7 @@
               </div>
             </div>
             <p class="hint">
-              喚醒：<code>你好</code>／<code>小一小一</code>　｜　天氣：<code>查天氣</code>　｜　導航／計算亦可
+              語音：點麥克風錄音 → Gemini　｜　也可打字　｜　天氣／導航／計算／YouTube
             </p>
           </div>
         </section>
@@ -517,18 +534,18 @@
     </div>
 
     <!-- 共用模組（帳號／Gemini／喚醒）在 desktop/；本頁僅手機殼層 -->
-    <script src="../desktop/config.example.js?v=68"></script>
-    <script src="../desktop/config.deploy.js?v=68"></script>
-    <script src="../desktop/config.local.js?v=68" onerror="/* optional */"></script>
+    <script src="../desktop/config.example.js?v=69"></script>
+    <script src="../desktop/config.deploy.js?v=69"></script>
+    <script src="../desktop/config.local.js?v=69" onerror="/* optional */"></script>
     <script>
       window.XIAO_YI_PLATFORM = "mobile";
     </script>
-    <script src="../desktop/auth.js?v=85"></script>
+    <script src="../desktop/auth.js?v=86"></script>
     <script src="../desktop/auto_tag.js?v=42"></script>
     <script src="../desktop/wake_word.js?v=87"></script>
-    <script src="../desktop/gemini_tagger.js?v=81"></script>
+    <script src="../desktop/gemini_tagger.js?v=82"></script>
     <script type="module" src="../desktop/webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=90"></script>
+    <script src="voice_studio.js?v=91"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
