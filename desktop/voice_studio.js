@@ -595,6 +595,13 @@
         }
       }
     } catch (_) {}
+    if (pendingNativeCmd) {
+      const cmd = pendingNativeCmd;
+      pendingNativeCmd = "";
+      try {
+        await runNativeWakeCommand(cmd);
+      } catch (_) {}
+    }
   }
 
   async function initAuthGate() {
@@ -3095,6 +3102,68 @@
     setStatus("已登出，請重新登入");
   });
 
+  /** Android 前台服務喚醒：?nativeWake=1&nativeCmd=... */
+  let pendingNativeCmd = "";
+  function readNativeWakeFromUrl() {
+    try {
+      const q = new URLSearchParams(location.search || "");
+      if (q.get("nativeWake") !== "1") return "";
+      const raw = q.get("nativeCmd") || "";
+      let cmd = raw;
+      try {
+        cmd = decodeURIComponent(raw);
+      } catch (_) {}
+      // 清掉 query，避免重新整理重複執行
+      if (history.replaceState) {
+        const u = new URL(location.href);
+        u.searchParams.delete("nativeWake");
+        u.searchParams.delete("nativeCmd");
+        history.replaceState({}, "", u.pathname + u.search + u.hash);
+      }
+      return String(cmd || "").trim();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  async function runNativeWakeCommand(cmd) {
+    const text = String(cmd || "").trim();
+    if (!text) return;
+    setStatus(`原生喚醒：${text}`);
+    // 確保喚醒監聽開啟，方便後續續說
+    if (!wantListen) {
+      try {
+        await startListen("wake", false);
+      } catch (_) {}
+    }
+    // 交給既有指令管線（含喚醒詞裁切）
+    const stripped =
+      typeof WakeWord?.stripWakePrefix === "function"
+        ? WakeWord.stripWakePrefix(text)
+        : text;
+    const core = String(stripped || text).trim();
+    if (!core || isUnclearCommand(core)) {
+      // 只有喚醒詞 → 打招呼／請下指令
+      const out = WakeWord.processResult(
+        wakeSession,
+        text,
+        true,
+        onWakeTimeout
+      );
+      if (out.kind === "woke" || out.kind === "woke_wait") {
+        const name = currentUserLabel();
+        const prefix = name && name !== "你好" ? `${name}，` : "";
+        speakText(`${prefix}在！請說指令。`);
+      } else if (out.kind === "command_partial" || out.kind === "command_final") {
+        await executeCommand(out.coreCommand || core);
+      } else {
+        speakText("在！請說指令。");
+      }
+      return;
+    }
+    await executeCommand(core);
+  }
+
   if (window.WebLLMTagger) bindAi();
   else window.addEventListener("webllm-tagger-ready", bindAi, { once: true });
   bindAi();
@@ -3102,15 +3171,26 @@
   setWakeUi("idle");
   loadVoices();
   syncAuthUiMode();
+  pendingNativeCmd = readNativeWakeFromUrl();
 
   (async () => {
     await initAuthGate();
     const locked = document.body.classList.contains("auth-locked");
     if (locked) {
-      setStatus("請先登入以啟用小一語音助理");
+      setStatus(
+        pendingNativeCmd
+          ? "原生已喚醒，請先登入後執行指令"
+          : "請先登入以啟用小一語音助理"
+      );
       return;
     }
     setWakeUi("idle");
+    if (pendingNativeCmd) {
+      const cmd = pendingNativeCmd;
+      pendingNativeCmd = "";
+      await runNativeWakeCommand(cmd);
+      return;
+    }
     setStatus(
       SpeechRecognition
         ? "就緒：可打字傳送，或按麥克風啟動喚醒監聽"

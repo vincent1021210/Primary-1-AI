@@ -89,6 +89,26 @@ https://developers.google.com/digital-asset-links/tools/generator
 
 ---
 
+## 方案 A+：Android 前台服務背景喚醒（類 Hey Google）
+
+Bubblewrap 專案（本機 `Desktop/xiao-yi-android`）已加入：
+
+- `VoiceAssistantService`：常駐通知 + 原生 `SpeechRecognizer` 循環聽「小一小一／你好」
+- 偵測到喚醒後開啟 App，網址帶 `?nativeWake=1&nativeCmd=…`
+- 網頁 `voice_studio.js` 會讀取並執行指令
+
+### 使用注意
+
+1. 首次開啟請允許**麥克風**與**通知**。
+2. 通知欄會顯示「小一正在背景聆聽」——這是 Android 規定，沒有通知就不能長駐聽麥。
+3. 部分手機需關閉電池優化，否則熄屏後仍可能被系統暫停。
+4. 背景辨識依賴 Google 語音服務，需連網；效果不如系統內建 Hey Google，但是免商店第三方可行方案。
+5. 通知可點「停止聆聽」關閉背景服務。
+
+重新打包：在 `xiao-yi-android` 執行 `bubblewrap build`（或既有 auto-pack），再覆蓋 `downloads/xiao-yi-assistant.apk`。
+
+---
+
 ## 方案 A：網站直接發佈 APK
 
 本倉庫已提供：
