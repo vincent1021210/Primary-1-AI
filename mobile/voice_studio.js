@@ -52,8 +52,6 @@
     toolsDrawer: document.getElementById("toolsDrawer"),
     settingsDrawer: document.getElementById("settingsDrawer"),
     voiceAssistantToggle: document.getElementById("voiceAssistantToggle"),
-    voiceAssistantToggleMain: document.getElementById("voiceAssistantToggleMain"),
-    voiceAssistBarHint: document.getElementById("voiceAssistBarHint"),
     geminiKeyInput: document.getElementById("geminiKeyInput"),
     btnSaveGeminiKey: document.getElementById("btnSaveGeminiKey"),
     geminiKeyHint: document.getElementById("geminiKeyHint"),
@@ -178,11 +176,10 @@
   }
 
   function syncVoiceAssistantToggles(enabled) {
-    [els.voiceAssistantToggle, els.voiceAssistantToggleMain].forEach((el) => {
-      if (!el) return;
-      el.checked = enabled;
-      el.setAttribute("aria-checked", enabled ? "true" : "false");
-    });
+    const el = els.voiceAssistantToggle;
+    if (!el) return;
+    el.checked = enabled;
+    el.setAttribute("aria-checked", enabled ? "true" : "false");
   }
 
   function setVoiceAssistantEnabled(on) {
@@ -194,7 +191,7 @@
     if (!enabled) {
       if (wantListen || listening || recognition || geminiRecording) stopListen();
       setWakeUi("idle");
-      setStatus("語音助理已關閉（打開上方開關即可）");
+      setStatus("語音助理已關閉（請到設定開啟）");
     } else {
       setStatus(
         window.GeminiTagger?.apiKeyPresent?.()
@@ -208,14 +205,6 @@
   function applyVoiceAssistantUi() {
     const on = isVoiceAssistantEnabled();
     syncVoiceAssistantToggles(on);
-    const geminiVoice = Boolean(window.GeminiTagger?.apiKeyPresent?.());
-    if (els.voiceAssistBarHint) {
-      els.voiceAssistBarHint.textContent = !on
-        ? "已關閉：打開開關後才能用語音"
-        : geminiVoice
-          ? "開啟中：點麥克風錄音 → Gemini 理解後回覆"
-          : "開啟中：請點下方麥克風，再喊「小一小一」";
-    }
     if (els.btnWake) els.btnWake.disabled = !on;
     if (els.btnListen) els.btnListen.disabled = !on;
     document.body.classList.toggle("voice-assistant-off", !on);
@@ -3235,10 +3224,6 @@
     setVoiceAssistantEnabled(Boolean(e?.target?.checked));
   }
   els.voiceAssistantToggle?.addEventListener(
-    "change",
-    onVoiceAssistantToggleChange
-  );
-  els.voiceAssistantToggleMain?.addEventListener(
     "change",
     onVoiceAssistantToggleChange
   );

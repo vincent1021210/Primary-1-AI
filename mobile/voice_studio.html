@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=91" />
+    <link rel="stylesheet" href="voice_studio.css?v=92" />
   </head>
   <body class="auth-locked platform-mobile">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -249,19 +249,6 @@
             <button type="button" class="mode-tab active" id="tabChat">對話</button>
             <button type="button" class="mode-tab" id="tabWork"><span class="mode-spark">✦</span>工作</button>
           </div>
-          <label class="voice-assist-bar compact" for="voiceAssistantToggleMain">
-            <span class="voice-assist-bar-text">
-              <strong>語音助理</strong>
-              <small id="voiceAssistBarHint">開啟後點麥克風錄音，送 Gemini 理解回覆</small>
-            </span>
-            <input
-              type="checkbox"
-              id="voiceAssistantToggleMain"
-              checked
-              role="switch"
-              aria-checked="true"
-            />
-          </label>
           <p id="wakeStatus" class="wake-line">
             待命：點麥克風錄音，說完再點一次送出給小一
           </p>
@@ -552,7 +539,7 @@
     <script src="../desktop/wake_word.js?v=87"></script>
     <script src="../desktop/gemini_tagger.js?v=82"></script>
     <script type="module" src="../desktop/webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=93"></script>
+    <script src="voice_studio.js?v=94"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
