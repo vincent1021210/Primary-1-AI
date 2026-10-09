@@ -701,21 +701,47 @@
       }
     };
 
-    synth.cancel();
-    const utter = new SpeechSynthesisUtterance(content);
-    utter.lang = els.lang.value || "zh-TW";
-    utter.rate = Math.min(2, Math.max(0.5, Number(els.rate.value) || 1));
-    const voice = pickVoice(utter.lang);
-    if (voice) {
-      utter.voice = voice;
-      if (voice.lang) utter.lang = voice.lang;
-    }
-    utter.onstart = () => {
-      setBadge("speaking", "朗讀中");
+    const startUtter = () => {
+      try {
+        synth.cancel();
+      } catch (_) {}
+      const utter = new SpeechSynthesisUtterance(content);
+      utter.lang = els.lang.value || "zh-TW";
+      utter.rate = Math.min(2, Math.max(0.5, Number(els.rate.value) || 1));
+      const voice = pickVoice(utter.lang);
+      if (voice) {
+        utter.voice = voice;
+        if (voice.lang) utter.lang = voice.lang;
+      }
+      utter.onstart = () => {
+        setBadge("speaking", "朗讀中");
+      };
+      utter.onend = finish;
+      utter.onerror = finish;
+      try {
+        synth.speak(utter);
+      } catch (_) {
+        finish();
+      }
+      // Android 部分機種 speak 後短暫無反應，逾時仍恢復監聽
+      if (isMobileOrTwa()) {
+        setTimeout(() => {
+          if (!settled && !synth.speaking) finish();
+        }, 12000);
+      }
     };
-    utter.onend = finish;
-    utter.onerror = finish;
-    synth.speak(utter);
+
+    // Android Chrome 語音引擎常需等 voiceschanged
+    if (!synth.getVoices?.().length) {
+      const onVoices = () => {
+        synth.removeEventListener("voiceschanged", onVoices);
+        startUtter();
+      };
+      synth.addEventListener("voiceschanged", onVoices);
+      setTimeout(startUtter, 350);
+    } else {
+      startUtter();
+    }
   }
 
   function closeSearchPanel() {
@@ -2156,8 +2182,17 @@
       fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F2',location:'voice_studio.js:onerror',message:'recognition error',data:{err,wantListen,listening,listenMode,ignoreEndOnce,ttsPausedListen,generation,synthSpeaking:synth.speaking},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       if (err === "not-allowed") {
-        setStatus("無法使用麥克風，請允許權限後重試");
+        setStatus(
+          isMobileOrTwa()
+            ? "無法使用麥克風：請到系統設定開啟此 App 的麥克風權限，並允許網站使用麥克風"
+            : "無法使用麥克風，請允許權限後重試"
+        );
         wantListen = false;
+      } else if (err === "audio-capture") {
+        setStatus("找不到可用麥克風，或麥克風正被其他 App 占用");
+        wantListen = false;
+      } else if (err === "network") {
+        setStatus("語音辨識需要網路連線（使用 Google 語音服務），請確認已連上網");
       } else if (err === "no-speech") {
         setStatus(
           listenMode === "wake"
@@ -2251,11 +2286,46 @@
     }
   }
 
-  /** 強制開啟回音消除／降噪／自動增益 */
+  /** Android／TWA／手機：不可長時間佔用 getUserMedia，否則會搶走 Web Speech 麥克風 */
+  function isMobileOrTwa() {
+    const ua = navigator.userAgent || "";
+    if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+    try {
+      if (window.matchMedia("(display-mode: standalone)").matches) return true;
+      if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
+    } catch (_) {}
+    return Boolean(navigator.standalone);
+  }
+
+  /**
+   * 桌面：可保持 getUserMedia 做降噪音量條。
+   * Android App／手機：只短暫請求權限後立刻釋放，留給 SpeechRecognition。
+   */
   async function ensureOptimizedMic() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("瀏覽器不支援 getUserMedia");
+      throw new Error("瀏覽器不支援麥克風，請用 Chrome 開啟");
     }
+
+    if (isMobileOrTwa()) {
+      releaseOptimizedMic();
+      const probe = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      probe.getTracks().forEach((t) => t.stop());
+      if (els.micMeterHint) {
+        els.micMeterHint.textContent = "麥克風已授權（語音辨識專用）";
+      }
+      if (els.micLevelFill) {
+        els.micLevelFill.style.transform = "scaleX(0)";
+      }
+      setStatus("麥克風已就緒，可開始說話");
+      return null;
+    }
+
     if (micStream && micStream.active) {
       startVolumeMeter(micStream);
       return micStream;
