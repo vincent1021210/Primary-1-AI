@@ -5,22 +5,75 @@
 (function (global) {
   const STORAGE_KEY = "xiaoYiAuthSession";
   const TEMP_SESSION_KEY = "xiaoYiAuthSessionTemp";
+  const IDB_NAME = "xiaoYiAuthDB";
+  const IDB_STORE = "kv";
   const LOCAL_USERS_KEY = "xiaoYiUsersDB";
   const LOCAL_HISTORY_KEY = "xiaoYiHistoryDB";
   const LOCAL_PENDING_KEY = "xiaoYiPendingReg";
   const MIN_PASSWORD_LEN = 8;
 
-  /** 清除舊版「保持登入」殘留（localStorage／IndexedDB） */
-  function purgeLegacyPersistentSession() {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem("xiaoYiKeepLoggedIn");
-    } catch (_) {}
-    try {
-      if (global.indexedDB?.deleteDatabase) {
-        global.indexedDB.deleteDatabase("xiaoYiAuthDB");
+  /** IndexedDB 雙寫：部分 Android TWA 關閉 App 後比純 localStorage 更穩 */
+  function openIdb() {
+    return new Promise((resolve) => {
+      if (!global.indexedDB) {
+        resolve(null);
+        return;
       }
-    } catch (_) {}
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  async function idbSet(key, value) {
+    const db = await openIdb();
+    if (!db) return false;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(IDB_STORE, "readwrite");
+        tx.objectStore(IDB_STORE).put(value, key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (_) {
+        resolve(false);
+      }
+    });
+  }
+
+  async function idbGet(key) {
+    const db = await openIdb();
+    if (!db) return null;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(IDB_STORE, "readonly");
+        const req = tx.objectStore(IDB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => resolve(null);
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function idbRemove(key) {
+    const db = await openIdb();
+    if (!db) return;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(IDB_STORE, "readwrite");
+        tx.objectStore(IDB_STORE).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      } catch (_) {
+        resolve();
+      }
+    });
   }
 
   const SECURITY_QUESTIONS = [
@@ -78,20 +131,44 @@
   }
 
   function loadSession() {
+    // 永久保持登入：優先 localStorage
+    const persistent = parseSessionRaw(localStorage.getItem(STORAGE_KEY), () =>
+      localStorage.removeItem(STORAGE_KEY)
+    );
+    if (persistent) return { ...persistent, persistent: true };
+
+    // 相容舊版暫存（升級寫入 localStorage）
     try {
       const temp = parseSessionRaw(sessionStorage.getItem(TEMP_SESSION_KEY), () =>
         sessionStorage.removeItem(TEMP_SESSION_KEY)
       );
-      if (temp) return { ...temp, persistent: false };
+      if (temp) {
+        saveSession(temp);
+        return { ...temp, persistent: true };
+      }
     } catch (_) {}
     return null;
   }
 
+  /** 非同步：IndexedDB → localStorage（Android 關閉 App 後仍可還原） */
   async function loadSessionAsync() {
+    try {
+      const idbRaw = await idbGet(STORAGE_KEY);
+      const fromIdb = parseSessionRaw(
+        typeof idbRaw === "string" ? idbRaw : null,
+        () => idbRemove(STORAGE_KEY)
+      );
+      if (fromIdb) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(fromIdb));
+        } catch (_) {}
+        return { ...fromIdb, persistent: true };
+      }
+    } catch (_) {}
     return loadSession();
   }
 
-  /** 僅寫入 sessionStorage；關閉 App／分頁後需重新登入 */
+  /** 永久寫入 localStorage + IndexedDB；僅登出才清除 */
   function saveSession(session) {
     if (!session?.token) {
       clearSession();
@@ -104,22 +181,29 @@
       expiresAt: session.expiresAt || "",
       backend: session.backend || (useRemote() ? "appscript" : "local"),
     };
-    purgeLegacyPersistentSession();
+    const payload = JSON.stringify(data);
     try {
-      sessionStorage.setItem(TEMP_SESSION_KEY, JSON.stringify(data));
+      localStorage.setItem(STORAGE_KEY, payload);
+    } catch (_) {}
+    idbSet(STORAGE_KEY, payload).catch(() => {});
+    try {
+      sessionStorage.removeItem(TEMP_SESSION_KEY);
     } catch (_) {}
   }
 
   function clearSession() {
     try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (_) {}
+    try {
       sessionStorage.removeItem(TEMP_SESSION_KEY);
     } catch (_) {}
-    purgeLegacyPersistentSession();
+    idbRemove(STORAGE_KEY).catch(() => {});
   }
 
   /**
    * 是否允許自動還原登入：
-   * - 同一次瀏覽工作階段內有 session 可還原時為 true
+   * - 有永久 session 可還原時為 true
    * - 或設定檔明確 autoRestoreLogin: true
    */
   function autoRestoreLogin() {
@@ -140,6 +224,11 @@
       "xiaoYiPendingReg",
       "xiaoYiKeepLoggedIn",
     ].forEach((k) => localStorage.removeItem(k));
+    try {
+      if (global.indexedDB?.deleteDatabase) {
+        global.indexedDB.deleteDatabase(IDB_NAME);
+      }
+    } catch (_) {}
     return true;
   }
 
@@ -545,9 +634,6 @@
       ""
     );
   }
-
-  // 啟動時清掉舊版保持登入殘留
-  purgeLegacyPersistentSession();
 
   // clearAuthDataOnce: true，或網址加 ?clearAuth=1，載入時清空本機全部帳號
   try {
