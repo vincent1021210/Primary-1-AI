@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f7f9fc" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>小一 · AI 語音助理</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="voice_studio.css?v=66" />
+  </head>
+  <body class="auth-locked">
+    <div id="authGate" class="auth-gate" aria-live="polite">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <h1>小一</h1>
+        </div>
+        <p class="auth-lead">登入後即可使用語音助理</p>
+        <h2 id="authTitle" class="auth-title">帳號登入</h2>
+        <label class="auth-field">
+          <span id="authAccountLabel">帳號（Gmail）</span>
+          <input
+            type="email"
+            id="authAccount"
+            autocomplete="username"
+            placeholder="name@gmail.com"
+            inputmode="email"
+          />
+        </label>
+        <label class="auth-field auth-register-only" hidden>
+          <span>顯示名稱（可留空）</span>
+          <input
+            type="text"
+            id="authDisplayName"
+            autocomplete="nickname"
+            placeholder="例如：老闆"
+          />
+        </label>
+        <label class="auth-field">
+          <span>密碼</span>
+          <div class="auth-password-wrap">
+            <input
+              type="password"
+              id="authPassword"
+              autocomplete="current-password"
+              placeholder="至少 8 個字"
+              minlength="8"
+            />
+            <button
+              type="button"
+              id="authTogglePassword"
+              class="auth-show-pass"
+              aria-pressed="false"
+              aria-label="顯示密碼"
+              title="顯示密碼"
+            >
+              顯示
+            </button>
+          </div>
+        </label>
+        <div class="auth-register-only auth-code-row" hidden>
+          <label class="auth-field auth-code-field">
+            <span>郵件驗證碼</span>
+            <input
+              type="text"
+              id="authCode"
+              inputmode="numeric"
+              maxlength="6"
+              autocomplete="one-time-code"
+              placeholder="6 位數"
+            />
+          </label>
+          <button type="button" id="authSendCodeBtn" class="auth-send-code">
+            發送驗證碼
+          </button>
+        </div>
+        <p id="authError" class="auth-error" hidden></p>
+        <p id="authOk" class="auth-ok" hidden></p>
+        <button
+          type="button"
+          id="authSubmitBtn"
+          class="auth-submit"
+          style="min-height:64px;font-size:20px;font-weight:700;padding:20px 24px"
+        >
+          登入
+        </button>
+        <button type="button" id="authToggleLink" class="auth-toggle">
+          沒有帳號？立即註冊
+        </button>
+        <p id="authHint" class="auth-hint">
+          註冊需 Gmail 驗證碼；密碼至少 8 碼
+        </p>
+      </div>
+    </div>
+
+    <div class="app">
+      <div id="sidebarBackdrop" class="sidebar-backdrop" hidden aria-hidden="true"></div>
+      <aside class="sidebar" id="sidebar" aria-label="側欄選單">
+        <div class="sidebar-top">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span class="brand-name">小一</span>
+          </div>
+          <button type="button" id="btnToggleSidebar" class="icon-btn" title="收合側欄" aria-label="收合側欄">
+            ☰
+          </button>
+        </div>
+
+        <button type="button" id="btnNewChat" class="nav-item active">
+          <span class="nav-ico">✎</span>
+          新對話
+        </button>
+        <button type="button" id="btnFocusPrompt" class="nav-item">
+          <span class="nav-ico">⌕</span>
+          搜尋對話
+        </button>
+        <button type="button" id="btnToggleTools" class="nav-item">
+          <span class="nav-ico">▣</span>
+          工具庫
+        </button>
+
+        <div class="sidebar-section">
+          <div class="section-label-row">
+            <div class="section-label">近期對話</div>
+            <button
+              type="button"
+              id="btnClearRecent"
+              class="section-clear"
+              title="清除全部近期對話"
+            >
+              清除全部
+            </button>
+          </div>
+          <ul id="recentList" class="recent-list"></ul>
+        </div>
+
+        <div class="sidebar-foot">
+          <div class="user-chip">
+            <span id="userAvatar" class="user-avatar">一</span>
+            <div class="user-meta">
+              <strong id="userName">小一使用者</strong>
+              <span id="badge" class="badge">就緒</span>
+            </div>
+          </div>
+          <button type="button" id="btnLogout" class="logout-btn" title="登出" aria-label="登出">
+            登出
+          </button>
+          <button type="button" id="btnOpenSettings" class="icon-btn" title="設定">
+            ⚙
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="glow" aria-hidden="true"></div>
+
+        <header class="mobile-bar" id="mobileBar">
+          <button
+            type="button"
+            id="btnOpenSidebar"
+            class="icon-btn mobile-menu-btn"
+            title="開啟選單"
+            aria-label="開啟選單"
+          >
+            ☰
+          </button>
+          <div class="mobile-brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span class="brand-name">小一</span>
+          </div>
+          <button
+            type="button"
+            id="btnOpenSettingsMobile"
+            class="icon-btn"
+            title="設定"
+            aria-label="設定"
+          >
+            ⚙
+          </button>
+        </header>
+
+        <header class="main-head">
+          <p id="wakeStatus" class="wake-line">
+            待命：說「小一小一」或「你好」後再下指令
+          </p>
+          <span id="corePreview" class="core-preview"></span>
+        </header>
+
+        <section class="hero" id="hero">
+          <h1 id="heroGreeting">想做什麼嗎？</h1>
+          <p class="hero-sub">語音喚醒小一 · Gemini 糾錯 · 導航／天氣／計算</p>
+        </section>
+
+        <section class="chat-wrap">
+          <div id="chatThread" class="chat-thread" aria-live="polite"></div>
+          <textarea id="text" class="hidden-log" hidden readonly></textarea>
+          <p id="interim" class="interim" aria-live="polite"></p>
+
+          <section id="searchPanel" class="search-panel hidden" aria-live="polite">
+            <div class="search-head">
+              <strong id="searchTitle">結果</strong>
+              <button type="button" id="btnCloseSearch" class="ghost-btn">
+                關閉結果
+              </button>
+            </div>
+            <pre id="searchText" class="search-text hidden"></pre>
+            <iframe
+              id="searchFrame"
+              class="search-frame"
+              title="搜尋結果"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            ></iframe>
+          </section>
+        </section>
+
+        <section class="composer-wrap">
+          <div class="mic-meter" aria-label="麥克風音量">
+            <div class="mic-meter-bar">
+              <div id="micLevelFill" class="mic-meter-fill"></div>
+            </div>
+            <span id="micMeterHint" class="mic-meter-hint">安靜</span>
+          </div>
+
+          <form id="promptForm" class="composer" autocomplete="off">
+            <button type="button" id="btnClear" class="composer-plus" title="清空">
+              +
+            </button>
+            <input
+              id="promptInput"
+              type="text"
+              placeholder="打字問小一，按傳送；或按麥克風用語音…"
+              enterkeyhint="send"
+            />
+            <button type="button" id="modelChip" class="model-chip" title="目前模型">
+              Flash
+            </button>
+            <button
+              type="submit"
+              id="btnSend"
+              class="send-btn"
+              title="傳送文字"
+              aria-label="傳送"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M3.4 20.4 20.85 12.9c.5-.22.5-.97 0-1.2L3.4 4.2a.75.75 0 0 0-1.05.85l2.1 6.45c.08.25.3.42.55.45l8.2.95-8.2.95a.7.7 0 0 0-.55.45l-2.1 6.45a.75.75 0 0 0 1.05.85z"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              id="btnWake"
+              class="mic-btn"
+              title="啟動／停止喚醒監聽"
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"
+                />
+              </svg>
+            </button>
+          </form>
+          <p id="status" class="status">說「小一小一」或「你好」開始</p>
+          <p class="disclaimer">小一是 AI，有時可能會出錯。</p>
+        </section>
+
+        <!-- 隱藏／抽屜：保留原控制項給 JS -->
+        <section id="toolsDrawer" class="tools-drawer hidden">
+          <div class="tools-card">
+            <div class="tools-head">
+              <strong>工具庫</strong>
+              <button type="button" id="btnCloseTools" class="ghost-btn">關閉</button>
+            </div>
+            <div class="ai-row">
+              <button type="button" id="btnTestGemini" class="tool-btn">
+                測試 Gemini
+              </button>
+              <button type="button" id="btnLoadAi" class="tool-btn ghost">
+                載入 WebLLM 備援
+              </button>
+            </div>
+            <div class="ai-meta">
+              <strong id="aiStatus">檢查 AI 設定中…</strong>
+              <span id="aiProgress" class="ai-progress"></span>
+            </div>
+            <div class="tool-actions">
+              <button type="button" id="btnListen" class="tool-btn">一般聽寫</button>
+              <button type="button" id="btnSpeak" class="tool-btn">朗讀</button>
+              <button type="button" id="btnStopSpeak" class="tool-btn danger">
+                停止說話
+              </button>
+              <button type="button" id="btnStop" class="tool-btn ghost">全部停止</button>
+              <button type="button" id="btnCopy" class="tool-btn ghost">複製文字</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="settingsDrawer" class="tools-drawer hidden">
+          <div class="tools-card">
+            <div class="tools-head">
+              <strong>設定</strong>
+              <button type="button" id="btnCloseSettings" class="ghost-btn">關閉</button>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="lang">語言</label>
+                <select id="lang">
+                  <option value="zh-TW">繁體中文</option>
+                  <option value="zh-CN">簡體中文</option>
+                  <option value="en-US">English</option>
+                  <option value="ja-JP">日本語</option>
+                </select>
+              </div>
+              <div class="field grow">
+                <label for="voice">朗讀語音</label>
+                <select id="voice">
+                  <option value="">自動挑選</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="rate">語速 <span id="rateValue">1x</span></label>
+                <input
+                  id="rate"
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.05"
+                  value="1"
+                />
+              </div>
+            </div>
+            <p class="hint">
+              喚醒：<code>你好</code>／<code>小一小一</code>　｜　天氣：<code>查天氣</code>　｜　導航／計算亦可
+            </p>
+          </div>
+        </section>
+
+        <section
+          id="navConfirmPanel"
+          class="nav-confirm hidden"
+          hidden
+          aria-hidden="true"
+        >
+          <input id="navConfirmInput" type="hidden" value="" />
+          <span id="navConfirmCountdown" class="hidden">3</span>
+          <div id="navConfirmProgress" class="hidden"></div>
+          <p id="navConfirmHint" class="hidden"></p>
+          <button type="button" id="btnNavConfirm" class="hidden" tabindex="-1">
+            確認
+          </button>
+          <button type="button" id="btnNavCancel" class="hidden" tabindex="-1">
+            取消
+          </button>
+        </section>
+      </main>
+    </div>
+
+    <script src="config.example.js?v=68"></script>
+    <script src="config.deploy.js?v=68"></script>
+    <!-- 本機才有；GitHub Pages 沒有此檔屬正常 -->
+    <script src="config.local.js?v=68" onerror="/* optional */"></script>
+    <script src="auth.js?v=68"></script>
+    <script src="auto_tag.js?v=42"></script>
+    <script src="wake_word.js?v=68"></script>
+    <script src="gemini_tagger.js?v=68"></script>
+    <script type="module" src="webllm_tagger.js?v=42"></script>
+    <script src="voice_studio.js?v=68"></script>
+  </body>
+</html>

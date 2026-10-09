@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "AI 語音助手",
+  "version": "1.2.0",
+  "description": "免費語音助手：聽寫＋朗讀＋自動語音標籤（語意／說話者／時間軸）。無需 API Key。",
+  "permissions": ["contextMenus", "storage", "activeTab", "scripting", "geolocation"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "AI 語音助手",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["lib/language.js", "lib/tts.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

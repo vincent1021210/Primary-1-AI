@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>清除小一本機帳號</title>
+    <style>
+      body {
+        font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+        max-width: 420px;
+        margin: 48px auto;
+        padding: 0 16px;
+        color: #1f1f1f;
+      }
+      button {
+        background: #b3261e;
+        color: #fff;
+        border: none;
+        border-radius: 999px;
+        padding: 12px 20px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #msg {
+        margin-top: 16px;
+        line-height: 1.5;
+      }
+      a {
+        color: #0b57d0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>清除本機帳號資料</h1>
+    <p>會刪除瀏覽器內的登入狀態、註冊帳號、歷史與待驗證碼（不影響其他網站）。</p>
+    <button type="button" id="btn">立即清除全部帳號</button>
+    <p id="msg"></p>
+    <p><a href="voice_studio.html">返回小一語音工作室</a></p>
+    <script>
+      document.getElementById("btn").onclick = () => {
+        [
+          "xiaoYiAuthSession",
+          "xiaoYiUsersDB",
+          "xiaoYiHistoryDB",
+          "xiaoYiPendingReg",
+        ].forEach((k) => localStorage.removeItem(k));
+        document.getElementById("msg").textContent =
+          "已清除本機全部帳號資料。可返回語音工作室重新註冊。";
+      };
+      // 開啟本頁即自動清除一次
+      [
+        "xiaoYiAuthSession",
+        "xiaoYiUsersDB",
+        "xiaoYiHistoryDB",
+        "xiaoYiPendingReg",
+      ].forEach((k) => localStorage.removeItem(k));
+      document.getElementById("msg").textContent =
+        "已自動清除本機全部帳號資料。可返回語音工作室重新註冊。";
+    </script>
+  </body>
+</html>

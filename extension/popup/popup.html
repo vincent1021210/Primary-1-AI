@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI 語音助手</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="brand">
+        <img src="../icons/icon48.png" alt="" width="28" height="28" />
+        <div>
+          <h1>AI 語音助手</h1>
+          <p class="tagline">聽寫自動標籤 · 朗讀</p>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <label class="field-label" for="text">逐字稿</label>
+      <textarea
+        id="text"
+        rows="6"
+        placeholder="聽寫後停頓約 1 秒，自動出現：&#10;[⏱️ 00:03] [❓ 問題] …"
+      ></textarea>
+      <p id="interim" class="interim"></p>
+
+      <label class="field-label" for="rate">
+        語速 <span id="rateValue">1.0x</span>
+      </label>
+      <input id="rate" type="range" min="0.5" max="2" step="0.05" value="1" />
+      <div class="rate-marks">
+        <span>0.5x</span>
+        <button type="button" class="chip" data-rate="1">1x</button>
+        <button type="button" class="chip" data-rate="1.25">1.25x</button>
+        <button type="button" class="chip" data-rate="1.5">1.5x</button>
+        <span>2x</span>
+      </div>
+
+      <label class="field-label" for="lang">語言</label>
+      <select id="lang">
+        <option value="zh-TW">繁體中文</option>
+        <option value="zh-CN">簡體中文</option>
+        <option value="en-US">English (US)</option>
+        <option value="ja-JP">日本語</option>
+        <option value="auto">朗讀時自動偵測</option>
+      </select>
+
+      <label class="field-label" for="voice">朗讀語音</label>
+      <select id="voice">
+        <option value="">自動挑選最佳聲音</option>
+      </select>
+
+      <div class="actions dual">
+        <button type="button" id="btnListen" class="listen">開始聽寫</button>
+        <button type="button" id="btnSpeak" class="primary">朗讀</button>
+      </div>
+      <div class="actions">
+        <button type="button" id="btnPause" class="secondary">暫停朗讀</button>
+        <button type="button" id="btnStop" class="secondary">全部停止</button>
+      </div>
+
+      <p id="status" class="status" aria-live="polite"></p>
+    </main>
+
+    <footer class="footer">標籤全自動，無需手動選擇</footer>
+
+    <script src="../lib/language.js"></script>
+    <script src="../lib/tts.js"></script>
+    <script src="../lib/stt.js"></script>
+    <script src="../lib/auto_tag.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

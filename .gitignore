@@ -1,0 +1,11 @@
+desktop/config.local.js
+desktop/config.local.json
+desktop/_probe_gemini.py
+.env
+*.pem
+**/__pycache__/
+.cursor/
+**/debug-*.log
+*.log
+.DS_Store
+Thumbs.db
