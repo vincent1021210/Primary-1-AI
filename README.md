@@ -4,20 +4,26 @@
 
 ## 網頁版（GitHub Pages）
 
-部署後網址（約數分鐘生效）：
-
 **https://vincent1021210.github.io/Primary-1-AI/**
 
-或直接開啟：
+主畫面：
 
 **https://vincent1021210.github.io/Primary-1-AI/desktop/voice_studio.html**
+
+Manifest（Bubblewrap 用）：
+
+**https://vincent1021210.github.io/Primary-1-AI/manifest.json**
 
 ### 啟用 Pages
 
 1. GitHub 倉庫 → **Settings** → **Pages**
 2. Build and deployment → Source：**Deploy from a branch**
-3. Branch：**main**（或 `master`）／資料夾：**/ (root)**
+3. Branch：**main**／資料夾：**/ (root)**
 4. Save
+
+### 打包成 Android App
+
+詳見 **[ANDROID_PWA.md](./ANDROID_PWA.md)**（Bubblewrap 完整步驟）。
 
 ### 線上 Gemini 金鑰（勿提交到 Git）
 
