@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=72" />
+    <link rel="stylesheet" href="voice_studio.css?v=73" />
   </head>
   <body class="auth-locked">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -50,7 +50,7 @@
             placeholder="例如：老闆"
           />
         </label>
-        <label class="auth-field">
+        <label class="auth-field auth-password-field">
           <span>密碼</span>
           <div class="auth-password-wrap">
             <input
@@ -72,6 +72,52 @@
             </button>
           </div>
         </label>
+
+        <!-- 註冊：安全提示問題 -->
+        <div id="registerSecurityZone" class="auth-register-only auth-security-zone" hidden>
+          <label class="auth-field">
+            <span>忘記密碼防護：安全問題</span>
+            <select id="regQuestion" class="auth-select">
+              <option value="你小學班導的名字？">你小學班導的名字？</option>
+              <option value="你第一隻寵物叫什麼？">你第一隻寵物叫什麼？</option>
+              <option value="你出生的城市是哪裡？">你出生的城市是哪裡？</option>
+            </select>
+          </label>
+          <label class="auth-field">
+            <span>安全問題答案</span>
+            <input
+              type="text"
+              id="regAnswer"
+              autocomplete="off"
+              placeholder="請輸入只有你知道的答案"
+            />
+          </label>
+        </div>
+
+        <!-- 忘記密碼：答題 + 新密碼 -->
+        <div id="forgotPasswordZone" class="auth-forgot-only auth-security-zone" hidden>
+          <p id="securityQuestionLabel" class="auth-security-q"></p>
+          <label class="auth-field">
+            <span>安全問題答案</span>
+            <input
+              type="text"
+              id="securityAnswer"
+              autocomplete="off"
+              placeholder="請輸入答案"
+            />
+          </label>
+          <label class="auth-field">
+            <span>新密碼</span>
+            <input
+              type="password"
+              id="newPassword"
+              autocomplete="new-password"
+              placeholder="至少 8 個字"
+              minlength="8"
+            />
+          </label>
+        </div>
+
         <div class="auth-register-only auth-code-row" hidden>
           <label class="auth-field auth-code-field">
             <span>郵件驗證碼</span>
@@ -98,11 +144,16 @@
         >
           登入
         </button>
-        <button type="button" id="authToggleLink" class="auth-toggle">
-          沒有帳號？立即註冊
-        </button>
+        <div class="auth-links">
+          <button type="button" id="authToggleLink" class="auth-toggle">
+            沒有帳號？立即註冊
+          </button>
+          <button type="button" id="forgotPasswordLink" class="auth-toggle auth-forgot-link">
+            忘記密碼？
+          </button>
+        </div>
         <p id="authHint" class="auth-hint">
-          註冊需 Gmail 驗證碼；密碼至少 8 碼
+          註冊需 Gmail 驗證碼、安全問題；密碼至少 8 碼
         </p>
       </div>
     </div>
@@ -379,12 +430,12 @@
     <script src="config.deploy.js?v=68"></script>
     <!-- 本機才有；GitHub Pages 沒有此檔屬正常 -->
     <script src="config.local.js?v=68" onerror="/* optional */"></script>
-    <script src="auth.js?v=68"></script>
+    <script src="auth.js?v=73"></script>
     <script src="auto_tag.js?v=42"></script>
     <script src="wake_word.js?v=72"></script>
     <script src="gemini_tagger.js?v=68"></script>
     <script type="module" src="webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=72"></script>
+    <script src="voice_studio.js?v=73"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

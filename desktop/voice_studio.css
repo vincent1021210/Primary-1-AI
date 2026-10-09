@@ -185,9 +185,62 @@ body.auth-locked .app {
   line-height: 1.45;
 }
 
-/* 登入模式強制隱藏註冊專用欄位（避免 display:flex 蓋掉 hidden） */
+/* 登入模式強制隱藏註冊／忘記密碼專用欄位（避免 display:flex 蓋掉 hidden） */
 .auth-register-only[hidden],
-.auth-field.auth-register-only[hidden] {
+.auth-field.auth-register-only[hidden],
+.auth-forgot-only[hidden],
+.auth-password-field[hidden] {
+  display: none !important;
+}
+
+.auth-security-zone {
+  margin: 4px 0 10px;
+  text-align: left;
+}
+
+.auth-security-q {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 13px;
+  color: #3c4043;
+  line-height: 1.45;
+}
+
+.auth-select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 14px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.auth-links .auth-toggle {
+  width: auto;
+  margin-top: 0;
+  text-align: left;
+}
+
+.auth-forgot-link {
+  color: #5f6368 !important;
+  text-align: right !important;
+}
+
+.auth-forgot-link[hidden] {
   display: none !important;
 }
 

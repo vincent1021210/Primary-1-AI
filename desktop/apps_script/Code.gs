@@ -15,7 +15,8 @@ function doGet(e) {
   return jsonOut_({
     ok: true,
     service: "xiao-yi-auth",
-    hint: "POST：sendRegisterCode|register|login|logout|me|appendHistory|listHistory",
+    hint:
+      "POST：sendRegisterCode|register|login|getSecurityQuestion|resetPassword|logout|me|appendHistory|listHistory",
   });
 }
 
@@ -30,6 +31,15 @@ function doPost(e) {
     }
     if (action === "register") return jsonOut_(register_(body));
     if (action === "login") return jsonOut_(login_(body));
+    if (
+      action === "getsecurityquestion" ||
+      action === "get_security_question"
+    ) {
+      return jsonOut_(getSecurityQuestion_(body));
+    }
+    if (action === "resetpassword" || action === "reset_password") {
+      return jsonOut_(resetPassword_(body));
+    }
     if (action === "logout") return jsonOut_(logout_(body));
     if (action === "me") return jsonOut_(me_(body));
     if (action === "appendhistory" || action === "append_history") {
@@ -80,7 +90,18 @@ function ensureSheets_(ss) {
       "salt",
       "passwordHash",
       "createdAt",
+      "securityQuestion",
+      "answerHash",
     ]);
+  } else {
+    // 舊表升級：補安全問題欄
+    var uh = users.getRange(1, 1, 1, Math.max(7, users.getLastColumn())).getValues()[0];
+    if (String(uh[5] || "") !== "securityQuestion") {
+      users.getRange(1, 6).setValue("securityQuestion");
+    }
+    if (String(uh[6] || "") !== "answerHash") {
+      users.getRange(1, 7).setValue("answerHash");
+    }
   }
   var sessions = ss.getSheetByName("Sessions") || ss.insertSheet("Sessions");
   if (sessions.getLastRow() === 0) {
@@ -100,7 +121,17 @@ function ensureSheets_(ss) {
       "codeHash",
       "expiresAt",
       "sentAt",
+      "securityQuestion",
+      "answerHash",
     ]);
+  } else {
+    var ph = pending.getRange(1, 1, 1, Math.max(9, pending.getLastColumn())).getValues()[0];
+    if (String(ph[7] || "") !== "securityQuestion") {
+      pending.getRange(1, 8).setValue("securityQuestion");
+    }
+    if (String(ph[8] || "") !== "answerHash") {
+      pending.getRange(1, 9).setValue("answerHash");
+    }
   }
   var sheets = ss.getSheets();
   for (var i = sheets.length - 1; i >= 0; i--) {
@@ -153,6 +184,13 @@ function hashPassword_(password, salt) {
   return bytesToHex_(bytes);
 }
 
+function normalizeAnswer_(answer) {
+  return String(answer || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
 function bytesToHex_(bytes) {
   return bytes
     .map(function (b) {
@@ -192,6 +230,8 @@ function findUserRow_(account) {
         salt: data[i][2],
         passwordHash: data[i][3],
         createdAt: data[i][4],
+        securityQuestion: data[i][5] || "",
+        answerHash: data[i][6] || "",
       };
     }
   }
@@ -212,6 +252,8 @@ function findPendingRow_(account) {
         codeHash: data[i][4],
         expiresAt: data[i][5],
         sentAt: data[i][6],
+        securityQuestion: data[i][7] || "",
+        answerHash: data[i][8] || "",
       };
     }
   }
@@ -265,12 +307,17 @@ function sendRegisterCode_(body) {
   var account = normalizeAccount_(body.account);
   var password = String(body.password || "");
   var displayName = String(body.displayName || "").trim();
+  var securityQuestion = String(body.securityQuestion || "").trim();
+  var securityAnswer = normalizeAnswer_(body.securityAnswer);
 
   if (!isGmail_(account)) {
     return { ok: false, error: "註冊帳號必須是 Gmail（例：name@gmail.com）" };
   }
   if (password.length < MIN_PASSWORD_LEN) {
     return { ok: false, error: "密碼至少 " + MIN_PASSWORD_LEN + " 個字" };
+  }
+  if (!securityQuestion || !securityAnswer) {
+    return { ok: false, error: "請設定安全問題與答案（忘記密碼用）" };
   }
   if (findUserRow_(account)) {
     return { ok: false, error: "此 Gmail 已被註冊，請直接登入" };
@@ -291,6 +338,7 @@ function sendRegisterCode_(body) {
   var salt = Utilities.getUuid();
   var passwordHash = hashPassword_(password, salt);
   var codeHash = hashPassword_(code, salt);
+  var answerHash = hashPassword_(securityAnswer, salt);
   var now = new Date();
   var expires = new Date(now.getTime() + CODE_TTL_MS);
 
@@ -303,6 +351,8 @@ function sendRegisterCode_(body) {
     codeHash,
     expires.toISOString(),
     now.toISOString(),
+    securityQuestion,
+    answerHash,
   ]);
 
   try {
@@ -366,6 +416,8 @@ function register_(body) {
     pending.salt,
     pending.passwordHash,
     new Date().toISOString(),
+    pending.securityQuestion || "",
+    pending.answerHash || "",
   ]);
   deletePending_(account);
 
@@ -376,6 +428,64 @@ function register_(body) {
     displayName: pending.displayName || account,
     token: session.token,
     expiresAt: session.expiresAt,
+  };
+}
+
+function getSecurityQuestion_(body) {
+  var account = normalizeAccount_(body.account);
+  if (!account) {
+    return { ok: false, error: "請先輸入帳號（Gmail）" };
+  }
+  var user = findUserRow_(account);
+  if (!user) {
+    return { ok: false, error: "找不到此帳號，請確認是否輸入正確" };
+  }
+  if (!user.securityQuestion || !user.answerHash) {
+    return {
+      ok: false,
+      error:
+        "此帳號尚未設定安全問題（舊帳號）。請用原密碼登入，或重新註冊新帳號。",
+    };
+  }
+  return {
+    ok: true,
+    account: account,
+    question: String(user.securityQuestion),
+  };
+}
+
+function resetPassword_(body) {
+  var account = normalizeAccount_(body.account);
+  var answer = normalizeAnswer_(body.securityAnswer);
+  var newPassword = String(body.newPassword || "");
+  if (!account) return { ok: false, error: "請輸入帳號" };
+  if (!answer) return { ok: false, error: "請輸入安全問題答案" };
+  if (newPassword.length < MIN_PASSWORD_LEN) {
+    return { ok: false, error: "新密碼至少 " + MIN_PASSWORD_LEN + " 個字" };
+  }
+  var user = findUserRow_(account);
+  if (!user) return { ok: false, error: "找不到此帳號" };
+  if (!user.answerHash || !user.salt) {
+    return { ok: false, error: "此帳號未設定安全問題，無法重設" };
+  }
+  var expect = hashPassword_(answer, user.salt);
+  if (expect !== String(user.answerHash)) {
+    return { ok: false, error: "安全問題答案不正確" };
+  }
+  var newHash = hashPassword_(newPassword, user.salt);
+  usersSheet_().getRange(user.row, 4).setValue(newHash);
+  // 清除該帳號既有工作階段，強制用新密碼重登
+  var sheet = sessionsSheet_();
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][1]).toLowerCase() === account) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  return {
+    ok: true,
+    account: account,
+    message: "密碼重設成功，請用新密碼登入",
   };
 }
 

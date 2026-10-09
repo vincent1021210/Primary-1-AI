@@ -8,6 +8,18 @@
   const LOCAL_HISTORY_KEY = "xiaoYiHistoryDB";
   const LOCAL_PENDING_KEY = "xiaoYiPendingReg";
   const MIN_PASSWORD_LEN = 8;
+  const SECURITY_QUESTIONS = [
+    "你小學班導的名字？",
+    "你第一隻寵物叫什麼？",
+    "你出生的城市是哪裡？",
+  ];
+
+  function normalizeAnswer(answer) {
+    return String(answer || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "");
+  }
 
   function cfg() {
     return global.APP_CONFIG || {};
@@ -158,8 +170,25 @@
     return data;
   }
 
+  function validateSecurity(question, answer) {
+    const q = String(question || "").trim();
+    const a = normalizeAnswer(answer);
+    if (!q) throw new Error("請選擇安全問題");
+    if (!SECURITY_QUESTIONS.includes(q)) {
+      throw new Error("請選擇有效的安全問題");
+    }
+    if (a.length < 1) throw new Error("請填寫安全問題答案");
+    return { question: q, answerNorm: a };
+  }
+
   /** 寄送註冊驗證碼（本機模式會回傳 demoCode 供測試） */
-  async function sendRegisterCode(account, password, displayName) {
+  async function sendRegisterCode(
+    account,
+    password,
+    displayName,
+    securityQuestion,
+    securityAnswer
+  ) {
     const key = normalizeAccount(account);
     if (!isGmail(key)) {
       throw new Error("註冊帳號必須是 Gmail（例：name@gmail.com）");
@@ -167,12 +196,15 @@
     if (String(password || "").length < MIN_PASSWORD_LEN) {
       throw new Error(`密碼至少 ${MIN_PASSWORD_LEN} 個字`);
     }
+    const sec = validateSecurity(securityQuestion, securityAnswer);
 
     if (useRemote()) {
       return api("sendRegisterCode", {
         account: key,
         password,
         displayName: displayName || key.split("@")[0],
+        securityQuestion: sec.question,
+        securityAnswer: sec.answerNorm,
       });
     }
 
@@ -191,6 +223,7 @@
     const salt = randomToken();
     const passwordHash = await sha256Hex(`${password}::${salt}`);
     const codeHash = await sha256Hex(`${code}::${salt}`);
+    const answerHash = await sha256Hex(`${sec.answerNorm}::${salt}`);
     localStorage.setItem(
       LOCAL_PENDING_KEY,
       JSON.stringify({
@@ -199,6 +232,8 @@
         salt,
         passwordHash,
         codeHash,
+        securityQuestion: sec.question,
+        answerHash,
         expiresAt: Date.now() + 10 * 60 * 1000,
         sentAt: Date.now(),
       })
@@ -242,6 +277,8 @@
       displayName: pending.displayName || key,
       salt: pending.salt,
       passwordHash: pending.passwordHash,
+      securityQuestion: pending.securityQuestion || "",
+      answerHash: pending.answerHash || "",
       createdAt: new Date().toISOString(),
     };
     saveLocalUsers(db);
@@ -256,6 +293,65 @@
     };
     saveSession(session);
     return session;
+  }
+
+  /** 查詢帳號的安全問題（不回傳答案） */
+  async function getSecurityQuestion(account) {
+    const key = normalizeAccount(account);
+    if (!key) throw new Error("請先輸入帳號（Gmail）");
+
+    if (useRemote()) {
+      return api("getSecurityQuestion", { account: key });
+    }
+
+    const user = loadLocalUsers()[key];
+    if (!user) throw new Error("找不到此帳號，請確認是否輸入正確");
+    if (!user.securityQuestion || !user.answerHash) {
+      throw new Error(
+        "此帳號尚未設定安全問題（舊帳號）。請用原密碼登入，或清除本機資料後重新註冊。"
+      );
+    }
+    return {
+      ok: true,
+      account: key,
+      question: user.securityQuestion,
+    };
+  }
+
+  /** 答對安全問題後重設密碼 */
+  async function resetPassword(account, answer, newPassword) {
+    const key = normalizeAccount(account);
+    const newPass = String(newPassword || "");
+    const ans = normalizeAnswer(answer);
+    if (!key) throw new Error("請輸入帳號");
+    if (!ans) throw new Error("請輸入安全問題答案");
+    if (newPass.length < MIN_PASSWORD_LEN) {
+      throw new Error(`新密碼至少 ${MIN_PASSWORD_LEN} 個字`);
+    }
+
+    if (useRemote()) {
+      return api("resetPassword", {
+        account: key,
+        securityAnswer: ans,
+        newPassword: newPass,
+      });
+    }
+
+    const db = loadLocalUsers();
+    const user = db[key];
+    if (!user) throw new Error("找不到此帳號");
+    if (!user.answerHash || !user.salt) {
+      throw new Error("此帳號未設定安全問題，無法重設");
+    }
+    const expect = await sha256Hex(`${ans}::${user.salt}`);
+    if (expect !== user.answerHash) {
+      throw new Error("安全問題答案不正確");
+    }
+    user.passwordHash = await sha256Hex(`${newPass}::${user.salt}`);
+    db[key] = user;
+    saveLocalUsers(db);
+    clearSession();
+    return { ok: true, account: key, message: "密碼重設成功，請用新密碼登入" };
   }
 
   async function login(account, password) {
@@ -384,6 +480,7 @@
 
   global.XiaoYiAuth = {
     MIN_PASSWORD_LEN,
+    SECURITY_QUESTIONS,
     isGmail,
     authUrl,
     requireLogin,
@@ -391,6 +488,8 @@
     sendRegisterCode,
     register,
     login,
+    getSecurityQuestion,
+    resetPassword,
     logout,
     refreshMe,
     appendHistory,

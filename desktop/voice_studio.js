@@ -68,6 +68,14 @@
     authTogglePassword: document.getElementById("authTogglePassword"),
     authSubmitBtn: document.getElementById("authSubmitBtn"),
     authToggleLink: document.getElementById("authToggleLink"),
+    forgotPasswordLink: document.getElementById("forgotPasswordLink"),
+    registerSecurityZone: document.getElementById("registerSecurityZone"),
+    forgotPasswordZone: document.getElementById("forgotPasswordZone"),
+    regQuestion: document.getElementById("regQuestion"),
+    regAnswer: document.getElementById("regAnswer"),
+    securityQuestionLabel: document.getElementById("securityQuestionLabel"),
+    securityAnswer: document.getElementById("securityAnswer"),
+    newPassword: document.getElementById("newPassword"),
     authSendCodeBtn: document.getElementById("authSendCodeBtn"),
     authCode: document.getElementById("authCode"),
     authError: document.getElementById("authError"),
@@ -77,7 +85,8 @@
     btnLogout: document.getElementById("btnLogout"),
   };
 
-  let authRegisterMode = false;
+  /** @type {'login' | 'register' | 'forgot'} */
+  let authMode = "login";
   let authCodeCooldownTimer = null;
 
   const RECENT_KEY = "xiao_yi_recent_chats";
@@ -441,26 +450,45 @@
     // #endregion
   }
 
+  function setAuthLoginMode() {
+    authMode = "login";
+    syncAuthUiMode();
+  }
+
   function syncAuthUiMode() {
+    const isReg = authMode === "register";
+    const isForgot = authMode === "forgot";
+
     if (els.authTitle) {
-      els.authTitle.textContent = authRegisterMode
-        ? "Gmail 註冊"
-        : "帳號登入";
+      els.authTitle.textContent = isForgot
+        ? "重設密碼"
+        : isReg
+          ? "Gmail 註冊"
+          : "帳號登入";
     }
     if (els.authSubmitBtn) {
-      els.authSubmitBtn.textContent = authRegisterMode
-        ? "驗證並註冊"
-        : "登入";
+      els.authSubmitBtn.textContent = isForgot
+        ? "驗證並修改密碼"
+        : isReg
+          ? "驗證並註冊"
+          : "登入";
     }
     if (els.authToggleLink) {
-      els.authToggleLink.textContent = authRegisterMode
-        ? "已有帳號？返回登入"
-        : "沒有帳號？立即註冊";
+      els.authToggleLink.textContent =
+        isReg || isForgot
+          ? "已有帳號？返回登入"
+          : "沒有帳號？立即註冊";
+    }
+    if (els.forgotPasswordLink) {
+      els.forgotPasswordLink.hidden = isForgot || isReg;
+      if (isForgot || isReg) {
+        els.forgotPasswordLink.setAttribute("hidden", "");
+      } else {
+        els.forgotPasswordLink.removeAttribute("hidden");
+      }
     }
     if (els.authAccountLabel) {
-      els.authAccountLabel.textContent = authRegisterMode
-        ? "Gmail"
-        : "帳號（Gmail）";
+      els.authAccountLabel.textContent = isReg ? "Gmail" : "帳號（Gmail）";
     }
     if (els.authAccount) {
       els.authAccount.placeholder = "name@gmail.com";
@@ -469,12 +497,24 @@
     if (els.authPassword) {
       els.authPassword.placeholder = "至少 8 個字";
       els.authPassword.minLength = 8;
-      els.authPassword.autocomplete = authRegisterMode
+      els.authPassword.autocomplete = isReg
         ? "new-password"
         : "current-password";
     }
+
+    // 密碼欄：忘記密碼模式隱藏
+    document.querySelectorAll(".auth-password-field").forEach((el) => {
+      if (isForgot) {
+        el.hidden = true;
+        el.setAttribute("hidden", "");
+      } else {
+        el.hidden = false;
+        el.removeAttribute("hidden");
+      }
+    });
+
     document.querySelectorAll(".auth-register-only").forEach((el) => {
-      if (authRegisterMode) {
+      if (isReg) {
         el.hidden = false;
         el.removeAttribute("hidden");
       } else {
@@ -482,10 +522,37 @@
         el.setAttribute("hidden", "");
       }
     });
-    els.authGate?.classList.toggle("is-register", authRegisterMode);
-    if (!authRegisterMode) {
+
+    document.querySelectorAll(".auth-forgot-only").forEach((el) => {
+      if (isForgot) {
+        el.hidden = false;
+        el.removeAttribute("hidden");
+      } else {
+        el.hidden = true;
+        el.setAttribute("hidden", "");
+      }
+    });
+
+    els.authGate?.classList.toggle("is-register", isReg);
+    els.authGate?.classList.toggle("is-forgot", isForgot);
+
+    if (!isReg) {
       if (els.authCode) els.authCode.value = "";
       if (els.authDisplayName) els.authDisplayName.value = "";
+      if (els.regAnswer) els.regAnswer.value = "";
+    }
+    if (!isForgot) {
+      if (els.securityAnswer) els.securityAnswer.value = "";
+      if (els.newPassword) els.newPassword.value = "";
+      if (els.securityQuestionLabel) els.securityQuestionLabel.textContent = "";
+    }
+
+    if (els.authHint) {
+      els.authHint.textContent = isForgot
+        ? "答對安全問題即可在本機重設密碼（無需寄信）"
+        : isReg
+          ? "註冊需 Gmail 驗證碼與安全問題；密碼至少 8 碼"
+          : "註冊需 Gmail 驗證碼、安全問題；密碼至少 8 碼";
     }
     setAuthError("");
     setAuthOk("");
@@ -2811,8 +2878,42 @@
   });
 
   els.authToggleLink?.addEventListener("click", () => {
-    authRegisterMode = !authRegisterMode;
-    syncAuthUiMode();
+    if (authMode === "login") {
+      authMode = "register";
+      syncAuthUiMode();
+    } else {
+      setAuthLoginMode();
+    }
+  });
+
+  els.forgotPasswordLink?.addEventListener("click", async () => {
+    const account = String(els.authAccount?.value || "").trim();
+    setAuthError("");
+    setAuthOk("");
+    if (!account) {
+      setAuthError("請先在帳號欄輸入 Gmail，才能查詢安全問題");
+      els.authAccount?.focus();
+      return;
+    }
+    if (!window.XiaoYiAuth?.isGmail?.(account)) {
+      setAuthError("請輸入有效的 Gmail");
+      return;
+    }
+    els.forgotPasswordLink.disabled = true;
+    try {
+      const res = await window.XiaoYiAuth.getSecurityQuestion(account);
+      authMode = "forgot";
+      syncAuthUiMode();
+      if (els.securityQuestionLabel) {
+        els.securityQuestionLabel.textContent = `安全問題：${res.question || ""}`;
+      }
+      setAuthOk("請回答安全問題並設定新密碼");
+      els.securityAnswer?.focus();
+    } catch (err) {
+      setAuthError(err?.message || String(err));
+    } finally {
+      els.forgotPasswordLink.disabled = false;
+    }
   });
 
   els.authTogglePassword?.addEventListener("click", () => {
@@ -2831,6 +2932,8 @@
     const account = String(els.authAccount?.value || "").trim();
     const password = String(els.authPassword?.value || "");
     const displayName = String(els.authDisplayName?.value || "").trim();
+    const question = String(els.regQuestion?.value || "").trim();
+    const answer = String(els.regAnswer?.value || "").trim();
     setAuthError("");
     setAuthOk("");
     if (!window.XiaoYiAuth?.isGmail?.(account)) {
@@ -2841,12 +2944,19 @@
       setAuthError("密碼至少 8 個字");
       return;
     }
+    if (!answer) {
+      setAuthError("請填寫安全問題答案（忘記密碼時要用）");
+      els.regAnswer?.focus();
+      return;
+    }
     els.authSendCodeBtn.disabled = true;
     try {
       const res = await window.XiaoYiAuth.sendRegisterCode(
         account,
         password,
-        displayName
+        displayName,
+        question,
+        answer
       );
       if (res?.demoCode) {
         setAuthOk(
@@ -2870,9 +2980,49 @@
     const displayName = String(els.authDisplayName?.value || "").trim();
     const code = String(els.authCode?.value || "").trim();
     // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-bypass',hypothesisId:'D',location:'voice_studio.js:authSubmit',message:'login/register click',data:{mode:authRegisterMode?'register':'login',hasAccount:Boolean(account),passwordLen:password.length,hasCode:Boolean(code)},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-bypass',hypothesisId:'D',location:'voice_studio.js:authSubmit',message:'login/register/forgot click',data:{mode:authMode,hasAccount:Boolean(account),passwordLen:password.length,hasCode:Boolean(code)},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
-    if (!account || !password) {
+
+    if (!account) {
+      setAuthError("請輸入帳號（Gmail）");
+      return;
+    }
+
+    // ─── 忘記密碼／重設 ───
+    if (authMode === "forgot") {
+      const ans = String(els.securityAnswer?.value || "").trim();
+      const newPass = String(els.newPassword?.value || "");
+      if (!ans || !newPass) {
+        setAuthError("請輸入安全問題答案與新密碼");
+        return;
+      }
+      if (newPass.length < (window.XiaoYiAuth?.MIN_PASSWORD_LEN || 8)) {
+        setAuthError("新密碼至少 8 個字");
+        return;
+      }
+      els.authSubmitBtn.disabled = true;
+      setAuthError("");
+      setAuthOk("");
+      try {
+        const res = await window.XiaoYiAuth.resetPassword(
+          account,
+          ans,
+          newPass
+        );
+        setAuthOk(res?.message || "密碼重設成功！請使用新密碼登入。");
+        if (els.securityAnswer) els.securityAnswer.value = "";
+        if (els.newPassword) els.newPassword.value = "";
+        setAuthLoginMode();
+        setAuthOk("密碼已更新，請用新密碼登入");
+      } catch (err) {
+        setAuthError(err?.message || String(err));
+      } finally {
+        els.authSubmitBtn.disabled = false;
+      }
+      return;
+    }
+
+    if (!password) {
       setAuthError("請完整輸入帳號與密碼");
       return;
     }
@@ -2880,9 +3030,13 @@
       setAuthError("密碼至少 8 個字");
       return;
     }
-    if (authRegisterMode) {
+    if (authMode === "register") {
       if (!window.XiaoYiAuth?.isGmail?.(account)) {
         setAuthError("註冊帳號必須是 Gmail");
+        return;
+      }
+      if (!String(els.regAnswer?.value || "").trim()) {
+        setAuthError("請填寫安全問題答案");
         return;
       }
       if (!/^\d{6}$/.test(code)) {
@@ -2894,7 +3048,7 @@
     setAuthError("");
     setAuthOk("");
     try {
-      if (authRegisterMode) {
+      if (authMode === "register") {
         await window.XiaoYiAuth.register(account, password, displayName, code);
       } else {
         await window.XiaoYiAuth.login(account, password);
@@ -2916,11 +3070,17 @@
 
   els.authPassword?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
-      if (authRegisterMode) els.authSendCodeBtn?.click();
+      if (authMode === "register") els.authSendCodeBtn?.click();
       else els.authSubmitBtn?.click();
     }
   });
   els.authCode?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") els.authSubmitBtn?.click();
+  });
+  els.securityAnswer?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") els.newPassword?.focus();
+  });
+  els.newPassword?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") els.authSubmitBtn?.click();
   });
 
@@ -2931,7 +3091,7 @@
     await window.XiaoYiAuth?.logout?.();
     applyUserChrome();
     setAuthLocked(true);
-    syncAuthUiMode();
+    setAuthLoginMode();
     setStatus("已登出，請重新登入");
   });
 
