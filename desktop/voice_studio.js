@@ -82,6 +82,7 @@
     authOk: document.getElementById("authOk"),
     authHint: document.getElementById("authHint"),
     authAccountLabel: document.getElementById("authAccountLabel"),
+    keepLoggedIn: document.getElementById("keepLoggedIn"),
     btnLogout: document.getElementById("btnLogout"),
   };
 
@@ -547,12 +548,26 @@
       if (els.securityQuestionLabel) els.securityQuestionLabel.textContent = "";
     }
 
+    // 保持登入：登入／註冊模式顯示
+    document.querySelectorAll(".auth-login-only").forEach((el) => {
+      if (isForgot) {
+        el.hidden = true;
+        el.setAttribute("hidden", "");
+      } else {
+        el.hidden = false;
+        el.removeAttribute("hidden");
+      }
+    });
+    if (els.keepLoggedIn && window.XiaoYiAuth?.isKeepLoggedInPreferred) {
+      els.keepLoggedIn.checked = window.XiaoYiAuth.isKeepLoggedInPreferred();
+    }
+
     if (els.authHint) {
       els.authHint.textContent = isForgot
         ? "答對安全問題即可在本機重設密碼（無需寄信）"
         : isReg
           ? "註冊需 Gmail 驗證碼與安全問題；密碼至少 8 碼"
-          : "註冊需 Gmail 驗證碼、安全問題；密碼至少 8 碼";
+          : "勾選「保持登入」後，下次開啟免再輸入密碼";
     }
     setAuthError("");
     setAuthOk("");
@@ -633,12 +648,9 @@
     }
     setAuthLocked(true);
     syncAuthUiMode();
-    const allowRestore = auth.autoRestoreLogin?.() === true;
-    // 預設不自動用舊 token 進系統，避免「不用密碼就進去」
-    if (!allowRestore) {
-      auth.clearSession?.();
-    }
-    const session = allowRestore ? auth.loadSession?.() : null;
+    // 有勾選保持登入（localStorage）或本次臨時 session（sessionStorage）才自動還原
+    const session = auth.loadSession?.() || null;
+    const allowRestore = Boolean(session?.token);
     // #region agent log
     fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:initAuthGate:session',message:'local session check',data:{allowRestore,hasToken:Boolean(session?.token),account:session?.account?String(session.account).slice(0,3)+'***':'',backend:session?.backend||''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
@@ -3055,10 +3067,16 @@
     setAuthError("");
     setAuthOk("");
     try {
+      const persistent = els.keepLoggedIn
+        ? Boolean(els.keepLoggedIn.checked)
+        : true;
+      window.XiaoYiAuth?.setKeepLoggedInPreferred?.(persistent);
       if (authMode === "register") {
-        await window.XiaoYiAuth.register(account, password, displayName, code);
+        await window.XiaoYiAuth.register(account, password, displayName, code, {
+          persistent,
+        });
       } else {
-        await window.XiaoYiAuth.login(account, password);
+        await window.XiaoYiAuth.login(account, password, { persistent });
       }
       els.authPassword.value = "";
       if (els.authCode) els.authCode.value = "";
@@ -3177,11 +3195,17 @@
     await initAuthGate();
     const locked = document.body.classList.contains("auth-locked");
     if (locked) {
-      setStatus(
-        pendingNativeCmd
-          ? "原生已喚醒，請先登入後執行指令"
-          : "請先登入以啟用小一語音助理"
-      );
+      if (pendingNativeCmd) {
+        setStatus("您好像沒有登入，請先登入後再使用語音助理");
+        try {
+          speakText("您好像沒有登入，請先登入後再使用語音助理。", null, {
+            skipChat: false,
+            silent: false,
+          });
+        } catch (_) {}
+      } else {
+        setStatus("請先登入以啟用小一語音助理");
+      }
       return;
     }
     setWakeUi("idle");

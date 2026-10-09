@@ -4,6 +4,8 @@
  */
 (function (global) {
   const STORAGE_KEY = "xiaoYiAuthSession";
+  const TEMP_SESSION_KEY = "xiaoYiAuthSessionTemp";
+  const KEEP_LOGIN_KEY = "xiaoYiKeepLoggedIn";
   const LOCAL_USERS_KEY = "xiaoYiUsersDB";
   const LOCAL_HISTORY_KEY = "xiaoYiHistoryDB";
   const LOCAL_PENDING_KEY = "xiaoYiPendingReg";
@@ -47,14 +49,13 @@
       .toLowerCase();
   }
 
-  function loadSession() {
+  function parseSessionRaw(raw, clearFn) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (!data?.token || !data?.account) return null;
       if (data.expiresAt && Date.parse(data.expiresAt) < Date.now()) {
-        localStorage.removeItem(STORAGE_KEY);
+        if (typeof clearFn === "function") clearFn();
         return null;
       }
       return data;
@@ -63,35 +64,99 @@
     }
   }
 
-  function saveSession(session) {
+  function loadSession() {
+    // 1) 臨時工作階段（未勾選保持登入；關閉 App／分頁即失效）
+    try {
+      const temp = parseSessionRaw(sessionStorage.getItem(TEMP_SESSION_KEY), () =>
+        sessionStorage.removeItem(TEMP_SESSION_KEY)
+      );
+      if (temp) return { ...temp, persistent: false };
+    } catch (_) {}
+
+    // 2) 長效工作階段（有勾選保持登入）
+    const persistent = parseSessionRaw(localStorage.getItem(STORAGE_KEY), () =>
+      localStorage.removeItem(STORAGE_KEY)
+    );
+    if (persistent) return { ...persistent, persistent: true };
+    return null;
+  }
+
+  function isKeepLoggedInPreferred() {
+    try {
+      const v = localStorage.getItem(KEEP_LOGIN_KEY);
+      if (v === null || v === undefined || v === "") return true; // 預設勾選
+      return v === "1" || v === "true";
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function setKeepLoggedInPreferred(keep) {
+    try {
+      localStorage.setItem(KEEP_LOGIN_KEY, keep ? "1" : "0");
+    } catch (_) {}
+  }
+
+  /**
+   * @param {object} session
+   * @param {{ persistent?: boolean }} [options] persistent=true 寫入 localStorage
+   */
+  function saveSession(session, options = {}) {
+    const persistent =
+      options.persistent !== undefined
+        ? Boolean(options.persistent)
+        : isKeepLoggedInPreferred();
+
     if (!session?.token) {
-      localStorage.removeItem(STORAGE_KEY);
+      clearSession();
       return;
     }
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        token: session.token,
-        account: session.account,
-        displayName: session.displayName || session.account,
-        expiresAt: session.expiresAt || "",
-        backend: session.backend || (useRemote() ? "appscript" : "local"),
-      })
-    );
+    const payload = JSON.stringify({
+      token: session.token,
+      account: session.account,
+      displayName: session.displayName || session.account,
+      expiresAt: session.expiresAt || "",
+      backend: session.backend || (useRemote() ? "appscript" : "local"),
+    });
+
+    setKeepLoggedInPreferred(persistent);
+    try {
+      sessionStorage.removeItem(TEMP_SESSION_KEY);
+    } catch (_) {}
+    localStorage.removeItem(STORAGE_KEY);
+
+    if (persistent) {
+      localStorage.setItem(STORAGE_KEY, payload);
+    } else {
+      try {
+        sessionStorage.setItem(TEMP_SESSION_KEY, payload);
+      } catch (_) {
+        // sessionStorage 不可用時退回本次記憶體以外無法保持
+      }
+    }
   }
 
   function clearSession() {
     localStorage.removeItem(STORAGE_KEY);
+    try {
+      sessionStorage.removeItem(TEMP_SESSION_KEY);
+    } catch (_) {}
   }
 
-  /** 是否允許用本機 token 自動登入（預設 false：每次都要輸入密碼） */
+  /**
+   * 是否允許自動還原登入：
+   * - 有臨時／長效 session 可還原時為 true
+   * - 或設定檔明確 autoRestoreLogin: true
+   */
   function autoRestoreLogin() {
-    return cfg().autoRestoreLogin === true;
+    if (cfg().autoRestoreLogin === true) return true;
+    return Boolean(loadSession()?.token);
   }
 
   /** 清除本機全部帳號／工作階段／歷史／待驗證資料 */
   function clearAllLocalData() {
-    localStorage.removeItem(STORAGE_KEY);
+    clearSession();
+    localStorage.removeItem(KEEP_LOGIN_KEY);
     localStorage.removeItem(LOCAL_USERS_KEY);
     localStorage.removeItem(LOCAL_HISTORY_KEY);
     localStorage.removeItem(LOCAL_PENDING_KEY);
@@ -100,6 +165,7 @@
       "xiaoYiUsersDB",
       "xiaoYiHistoryDB",
       "xiaoYiPendingReg",
+      "xiaoYiKeepLoggedIn",
     ].forEach((k) => localStorage.removeItem(k));
     return true;
   }
@@ -274,15 +340,19 @@
     };
   }
 
-  async function register(account, password, displayName, code) {
+  async function register(account, password, displayName, code, options = {}) {
     const key = normalizeAccount(account);
     const codeStr = String(code || "").trim();
+    const persistent =
+      options.persistent !== undefined
+        ? Boolean(options.persistent)
+        : isKeepLoggedInPreferred();
     if (!isGmail(key)) throw new Error("註冊帳號必須是 Gmail");
     if (!/^\d{6}$/.test(codeStr)) throw new Error("請輸入 6 位數驗證碼");
 
     if (useRemote()) {
       const data = await api("register", { account: key, code: codeStr });
-      saveSession({ ...data, backend: "appscript" });
+      saveSession({ ...data, backend: "appscript" }, { persistent });
       return data;
     }
 
@@ -319,7 +389,7 @@
       expiresAt: new Date(Date.now() + 30 * 864e5).toISOString(),
       backend: "local",
     };
-    saveSession(session);
+    saveSession(session, { persistent });
     return session;
   }
 
@@ -382,8 +452,12 @@
     return { ok: true, account: key, message: "密碼重設成功，請用新密碼登入" };
   }
 
-  async function login(account, password) {
+  async function login(account, password, options = {}) {
     const key = normalizeAccount(account);
+    const persistent =
+      options.persistent !== undefined
+        ? Boolean(options.persistent)
+        : isKeepLoggedInPreferred();
     if (!key) throw new Error("請輸入帳號（Gmail）");
     if (String(password || "").length < MIN_PASSWORD_LEN) {
       throw new Error(`密碼至少 ${MIN_PASSWORD_LEN} 個字`);
@@ -391,7 +465,7 @@
 
     if (useRemote()) {
       const data = await api("login", { account: key, password });
-      saveSession({ ...data, backend: "appscript" });
+      saveSession({ ...data, backend: "appscript" }, { persistent });
       return data;
     }
 
@@ -408,7 +482,7 @@
       expiresAt: new Date(Date.now() + 30 * 864e5).toISOString(),
       backend: "local",
     };
-    saveSession(session);
+    saveSession(session, { persistent });
     return session;
   }
 
@@ -425,6 +499,7 @@
   async function refreshMe() {
     const session = loadSession();
     if (!session?.token) return null;
+    const persistent = session.persistent !== false;
     if (!useRemote() || session.backend === "local") {
       const db = loadLocalUsers();
       const user = db[session.account];
@@ -432,16 +507,22 @@
         clearSession();
         return null;
       }
-      saveSession({
-        ...session,
-        displayName: user.displayName || session.account,
-        backend: "local",
-      });
+      saveSession(
+        {
+          ...session,
+          displayName: user.displayName || session.account,
+          backend: "local",
+        },
+        { persistent }
+      );
       return loadSession();
     }
     try {
       const data = await api("me", { token: session.token });
-      saveSession({ ...session, ...data, backend: "appscript" });
+      saveSession(
+        { ...session, ...data, backend: "appscript" },
+        { persistent }
+      );
       return loadSession();
     } catch (_) {
       clearSession();
@@ -526,8 +607,11 @@
     isLoggedIn,
     displayName,
     loadSession,
+    saveSession,
     clearSession,
     clearAllLocalData,
     autoRestoreLogin,
+    isKeepLoggedInPreferred,
+    setKeepLoggedInPreferred,
   };
 })(window);
