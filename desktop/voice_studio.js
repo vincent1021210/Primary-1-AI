@@ -567,7 +567,7 @@
         ? "答對安全問題即可在本機重設密碼（無需寄信）"
         : isReg
           ? "註冊需 Gmail 驗證碼與安全問題；密碼至少 8 碼"
-          : "勾選「保持登入」後，下次開啟免再輸入密碼";
+          : "勾選「保持登入」會寫入 IndexedDB，關閉 App 仍保持登入";
     }
     setAuthError("");
     setAuthOk("");
@@ -648,18 +648,24 @@
     }
     setAuthLocked(true);
     syncAuthUiMode();
-    // 有勾選保持登入（localStorage）或本次臨時 session（sessionStorage）才自動還原
-    const session = auth.loadSession?.() || null;
+    // IndexedDB + localStorage 雙讀（TWA 關閉 App 後仍可還原）
+    const session =
+      (await auth.loadSessionAsync?.()) || auth.loadSession?.() || null;
     const allowRestore = Boolean(session?.token);
     // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:initAuthGate:session',message:'local session check',data:{allowRestore,hasToken:Boolean(session?.token),account:session?.account?String(session.account).slice(0,3)+'***':'',backend:session?.backend||''},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login',hypothesisId:'B',location:'voice_studio.js:initAuthGate:session',message:'durable session check',data:{allowRestore,hasToken:Boolean(session?.token),persistent:session?.persistent!==false,account:session?.account?String(session.account).slice(0,3)+'***':'',backend:session?.backend||''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (allowRestore && session?.token) {
       const me = await auth.refreshMe?.();
       // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:initAuthGate:refreshMe',message:'session refresh result',data:{restored:Boolean(me),account:me?.account?String(me.account).slice(0,3)+'***':''},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login',hypothesisId:'B',location:'voice_studio.js:initAuthGate:refreshMe',message:'session refresh result',data:{restored:Boolean(me),account:me?.account?String(me.account).slice(0,3)+'***':''},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       if (me) {
+        await unlockAppAfterLogin();
+        return;
+      }
+      // refresh 失敗但本機仍有 session：仍解鎖（避免 Apps Script 異常導致被踢出）
+      if (auth.loadSession?.()?.token || session.token) {
         await unlockAppAfterLogin();
         return;
       }
