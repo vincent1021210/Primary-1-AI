@@ -1,6 +1,7 @@
 // 複製成 config.local.js 後填入你的金鑰與 Apps Script 網址
 window.APP_CONFIG = {
   geminiApiKey: "",
+  /** Google AI：gemini-3.1-flash-lite（文字／語音／圖片多模態） */
   geminiModel: "gemini-3.1-flash-lite",
   /** 未登入時的預設稱呼（登入後改用帳號顯示名稱） */
   displayName: "",

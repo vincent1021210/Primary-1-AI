@@ -289,10 +289,13 @@
     if (gemini?.ready) {
       els.aiStatus.textContent = `Gemini 已設定（${gemini.modelId}）`;
       if (els.modelChip) {
-        els.modelChip.textContent = /flash/i.test(gemini.modelId || "")
-          ? "Flash"
-          : "Gemini";
-        els.modelChip.title = gemini.modelId || "Gemini";
+        const mid = String(gemini.modelId || "");
+        els.modelChip.textContent = /flash-lite/i.test(mid)
+          ? "3.1 Flash-Lite"
+          : /flash/i.test(mid)
+            ? "Flash"
+            : "Gemini";
+        els.modelChip.title = mid || "gemini-3.1-flash-lite";
       }
       if (els.btnLoadAi) {
         els.btnLoadAi.textContent = "載入 WebLLM 備援（可選）";
@@ -2395,9 +2398,10 @@
       setStatus(`語音理解失敗：${err?.message || err}`);
       setBadge("", "就緒");
       setWakeUi("idle");
+      notifyNativeAudioFocus(false);
       appendChatBubble(
         "assistant",
-        `抱歉，沒聽清楚：${err?.message || "請再說一次"}`
+        `抱歉，小一大腦連線失敗：${err?.message || "請檢查網路後再說一次"}`
       );
     }
   }
