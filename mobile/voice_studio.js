@@ -802,7 +802,10 @@
         setBadge("awake", "已喚醒");
         setWakeUi("awake", "");
         els.interim.textContent = "已喚醒，請繼續說指令…";
-        setStatus("已喚醒，請繼續說完整指令…");
+        setStatus("🎤 已喚醒，請說指令…");
+        try {
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        } catch (_) {}
         clearPendingWokeWait();
         {
           const wake = String(out.wakeWord || wakeSession.wakeWord || "");
@@ -816,7 +819,7 @@
             if (/^你好$|^您好$/.test(wake)) {
               speakText(`${prefix}你好`);
             } else {
-              speakText(`${prefix}在！請說完整指令，例如導航或查天氣。`);
+              speakText(`${prefix}在！請說指令。`);
             }
           }, silenceMs() + 300);
         }
@@ -2493,7 +2496,11 @@
       if (listenMode === "wake") {
         setBadge("listening", "喚醒監聽");
         setWakeUi(wakeSession.isAwake ? "awake" : "listening");
-        setStatus("喚醒模式已啟動：請說「小一小一」再下指令");
+        setStatus(
+          screenWakeLock
+            ? "常亮守護中：隨時喊「小一小一」或「你好」（請保持畫面開啟）"
+            : "喚醒監聽中：請說「小一小一」或「你好」"
+        );
       } else {
         setBadge("listening", "聽寫中");
         setStatus("一般聽寫中；停頓約 1 秒後自動加標籤");
