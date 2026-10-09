@@ -198,6 +198,17 @@
     } catch (_) {}
   }
 
+  /** 喚醒／朗讀時暫停其他 App 影音；說完後還焦點 */
+  function notifyNativeAudioFocus(hold) {
+    try {
+      if (hold) {
+        window.XiaoYiAndroid?.requestAudioFocus?.();
+      } else {
+        window.XiaoYiAndroid?.releaseAudioFocus?.();
+      }
+    } catch (_) {}
+  }
+
   function setVoiceAssistantEnabled(on) {
     const enabled = Boolean(on);
     try {
@@ -1081,10 +1092,14 @@
       } catch (_) {}
     }
 
+    notifyNativeAudioFocus(true);
+
     let settled = false;
     const finish = () => {
       if (settled) return;
       settled = true;
+      // 朗讀結束 → 還音訊焦點，背景 YouTube／音樂可恢復
+      notifyNativeAudioFocus(false);
       if (shouldResume && wantListen) {
         ttsPausedListen = false;
         startListen(listenMode, true);
@@ -1114,6 +1129,7 @@
       }
       utter.onstart = () => {
         setBadge("speaking", "朗讀中");
+        notifyNativeAudioFocus(true);
       };
       utter.onend = finish;
       utter.onerror = finish;
@@ -2468,9 +2484,10 @@
             (/附近|周邊|在地/.test(command) || /附近|周邊/.test(a.value || "")))
       );
       if (!skipSpeak) {
-        speakText(speak);
+        speakText(speak); // 朗讀結束會 releaseAudioFocus
       } else {
         speakText(speak, null, { silent: true });
+        setTimeout(() => notifyNativeAudioFocus(false), 1200);
       }
       setStatus(speak);
     } else if (!handled) {
@@ -2478,6 +2495,7 @@
       setStatus("已處理");
     } else {
       setStatus("已執行");
+      setTimeout(() => notifyNativeAudioFocus(false), 1200);
     }
     setBadge("", "就緒");
     refreshHeroVisibility();
@@ -3778,6 +3796,8 @@
     const text = String(rawText || "").trim();
     if (!text) return;
     console.log("[Android native wake]", text.slice(0, 80));
+    // 原生喚醒時再保險搶一次焦點（暫停背景影音）
+    notifyNativeAudioFocus(true);
     const clean = text.replace(/[\s，。？、！!]/g, "");
     let command = text;
     const wakes = ["小一小一", "小一小醫", "小一小依", "小一小伊", "你好", "您好"];
