@@ -51,6 +51,7 @@
     btnCloseSettings: document.getElementById("btnCloseSettings"),
     toolsDrawer: document.getElementById("toolsDrawer"),
     settingsDrawer: document.getElementById("settingsDrawer"),
+    voiceAssistantToggle: document.getElementById("voiceAssistantToggle"),
     promptForm: document.getElementById("promptForm"),
     promptInput: document.getElementById("promptInput"),
     btnSend: document.getElementById("btnSend"),
@@ -101,6 +102,7 @@
   let authCodeCooldownTimer = null;
 
   const RECENT_KEY = "xiao_yi_recent_chats";
+  const VOICE_ASSISTANT_KEY = "xiaoYiVoiceAssistantEnabled";
 
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -158,6 +160,52 @@
 
   function setStatus(msg) {
     els.status.textContent = msg || "";
+  }
+
+  function isVoiceAssistantEnabled() {
+    try {
+      const v = localStorage.getItem(VOICE_ASSISTANT_KEY);
+      if (v === null || v === undefined || v === "") return true;
+      return v === "1" || v === "true";
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function setVoiceAssistantEnabled(on) {
+    const enabled = Boolean(on);
+    try {
+      localStorage.setItem(VOICE_ASSISTANT_KEY, enabled ? "1" : "0");
+    } catch (_) {}
+    if (els.voiceAssistantToggle) {
+      els.voiceAssistantToggle.checked = enabled;
+      els.voiceAssistantToggle.setAttribute(
+        "aria-checked",
+        enabled ? "true" : "false"
+      );
+    }
+    if (!enabled) {
+      if (wantListen || listening || recognition) stopListen();
+      setWakeUi("idle");
+      setStatus("語音助理已關閉（可在設定重新開啟）");
+    } else {
+      setStatus("語音助理已開啟，可點麥克風啟動");
+    }
+    applyVoiceAssistantUi();
+  }
+
+  function applyVoiceAssistantUi() {
+    const on = isVoiceAssistantEnabled();
+    if (els.voiceAssistantToggle && els.voiceAssistantToggle.checked !== on) {
+      els.voiceAssistantToggle.checked = on;
+      els.voiceAssistantToggle.setAttribute(
+        "aria-checked",
+        on ? "true" : "false"
+      );
+    }
+    if (els.btnWake) els.btnWake.disabled = !on;
+    if (els.btnListen) els.btnListen.disabled = !on;
+    document.body.classList.toggle("voice-assistant-off", !on);
   }
 
   function setBadge(mode, label) {
@@ -2720,6 +2768,11 @@
       setStatus("請先登入以啟用語音助理");
       return;
     }
+    if (!isVoiceAssistantEnabled()) {
+      setStatus("語音助理已關閉，請到設定開啟");
+      applyVoiceAssistantUi();
+      return;
+    }
     if (!SpeechRecognition) {
       setStatus("此瀏覽器不支援 SpeechRecognition，請用 Chrome 或 Edge");
       return;
@@ -2871,6 +2924,10 @@
   });
 
   els.btnWake.addEventListener("click", () => {
+    if (!isVoiceAssistantEnabled()) {
+      setStatus("語音助理已關閉，請到設定開啟");
+      return;
+    }
     if (wantListen && listenMode === "wake") stopListen();
     else startListen("wake");
   });
@@ -2878,14 +2935,22 @@
   // 回到前景時：若仍在喚醒監聽，重新申請螢幕常亮（系統可能已釋放）
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
-    if (wantListen && listenMode === "wake") {
+    if (wantListen && listenMode === "wake" && isVoiceAssistantEnabled()) {
       requestScreenWakeLock();
     }
   });
 
   els.btnListen.addEventListener("click", () => {
+    if (!isVoiceAssistantEnabled()) {
+      setStatus("語音助理已關閉，請到設定開啟");
+      return;
+    }
     if (wantListen && listenMode === "dictation") stopListen();
     else startListen("dictation");
+  });
+
+  els.voiceAssistantToggle?.addEventListener("change", () => {
+    setVoiceAssistantEnabled(Boolean(els.voiceAssistantToggle.checked));
   });
 
   els.btnSpeak.addEventListener("click", speak);
@@ -3318,6 +3383,10 @@
   async function runNativeWakeCommand(cmd) {
     const text = String(cmd || "").trim();
     if (!text) return;
+    if (!isVoiceAssistantEnabled()) {
+      setStatus("語音助理已關閉，已忽略原生喚醒");
+      return;
+    }
     setStatus(`原生喚醒：${text}`);
     // 確保喚醒監聽開啟，方便後續續說
     if (!wantListen) {
@@ -3358,6 +3427,7 @@
   bindAi();
   initChromeUi();
   bindVisionImageUi();
+  applyVoiceAssistantUi();
   setWakeUi("idle");
   loadVoices();
   syncAuthUiMode();

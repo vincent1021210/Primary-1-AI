@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=82" />
+    <link rel="stylesheet" href="voice_studio.css?v=88" />
     <script>
       // 手機裝置一律進手機版；若有暫存 session 先升成永久再跳轉
       (function () {
@@ -389,6 +389,19 @@
               <strong>設定</strong>
               <button type="button" id="btnCloseSettings" class="ghost-btn">關閉</button>
             </div>
+            <label class="setting-switch" for="voiceAssistantToggle">
+              <span class="setting-switch-text">
+                <strong>語音助理</strong>
+                <small>開啟後可喚醒「小一小一」與語音聽寫</small>
+              </span>
+              <input
+                type="checkbox"
+                id="voiceAssistantToggle"
+                checked
+                role="switch"
+                aria-checked="true"
+              />
+            </label>
             <div class="row">
               <div class="field">
                 <label for="lang">語言</label>
@@ -455,7 +468,7 @@
     <script src="wake_word.js?v=72"></script>
     <script src="gemini_tagger.js?v=81"></script>
     <script type="module" src="webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=82"></script>
+    <script src="voice_studio.js?v=88"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
