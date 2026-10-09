@@ -22,12 +22,20 @@
     />
     <link rel="stylesheet" href="voice_studio.css?v=82" />
     <script>
-      // 手機裝置一律進手機版，不提供手動切換
+      // 手機裝置一律進手機版；若有暫存 session 先升成永久再跳轉
       (function () {
         var ua = navigator.userAgent || "";
-        if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) {
-          location.replace("../mobile/voice_studio.html" + location.search + location.hash);
-        }
+        if (!/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return;
+        try {
+          var temp = sessionStorage.getItem("xiaoYiAuthSessionTemp");
+          if (temp) {
+            localStorage.setItem("xiaoYiAuthSession", temp);
+            sessionStorage.removeItem("xiaoYiAuthSessionTemp");
+          }
+        } catch (_) {}
+        location.replace(
+          "../mobile/voice_studio.html" + location.search + location.hash
+        );
       })();
     </script>
   </head>

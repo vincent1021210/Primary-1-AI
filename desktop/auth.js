@@ -97,11 +97,20 @@
    * 手機版：永久保持登入（localStorage + IndexedDB）
    * 網頁版：僅本次分頁有效（sessionStorage；刷新需重登）
    * 由各入口頁設定 window.XIAO_YI_PLATFORM = "mobile" | "desktop"
+   * 並以路徑 /mobile/ 作備援判斷（避免腳本順序導致未設 PLATFORM）
    */
   function preferPersistentLogin() {
     if (cfg().persistentLogin === true) return true;
     if (cfg().persistentLogin === false) return false;
-    return String(global.XIAO_YI_PLATFORM || "").toLowerCase() === "mobile";
+    if (String(global.XIAO_YI_PLATFORM || "").toLowerCase() === "mobile") {
+      return true;
+    }
+    try {
+      const path = String(global.location?.pathname || "");
+      if (/\/mobile\//i.test(path)) return true;
+      if (document.body?.classList?.contains("platform-mobile")) return true;
+    } catch (_) {}
+    return false;
   }
 
   // #region agent log
@@ -130,12 +139,22 @@
       .toLowerCase();
   }
 
-  function parseSessionRaw(raw, clearFn) {
+  /**
+   * @param {string|null} raw
+   * @param {function} [clearFn]
+   * @param {{ ignoreExpiry?: boolean }} [opts] 手機還原時忽略過期，避免一打開就被踢回登入
+   */
+  function parseSessionRaw(raw, clearFn, opts = {}) {
     try {
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (!data?.token || !data?.account) return null;
-      if (data.expiresAt && Date.parse(data.expiresAt) < Date.now()) {
+      const ignoreExpiry = Boolean(opts.ignoreExpiry);
+      if (
+        !ignoreExpiry &&
+        data.expiresAt &&
+        Date.parse(data.expiresAt) < Date.now()
+      ) {
         if (typeof clearFn === "function") clearFn();
         return null;
       }
@@ -158,15 +177,19 @@
       return null;
     }
 
-    // 手機版：永久保持登入
-    const persistent = parseSessionRaw(localStorage.getItem(STORAGE_KEY), () =>
-      localStorage.removeItem(STORAGE_KEY)
+    // 手機版：永久保持登入（忽略本機 expiresAt，避免重開就被清掉）
+    const persistent = parseSessionRaw(
+      localStorage.getItem(STORAGE_KEY),
+      null,
+      { ignoreExpiry: true }
     );
     if (persistent) return { ...persistent, persistent: true };
 
     try {
-      const temp = parseSessionRaw(sessionStorage.getItem(TEMP_SESSION_KEY), () =>
-        sessionStorage.removeItem(TEMP_SESSION_KEY)
+      const temp = parseSessionRaw(
+        sessionStorage.getItem(TEMP_SESSION_KEY),
+        null,
+        { ignoreExpiry: true }
       );
       if (temp) {
         saveSession(temp);
@@ -176,16 +199,25 @@
     return null;
   }
 
-  /** 手機：IndexedDB → localStorage；網頁：僅 sessionStorage */
+  /** 手機：localStorage → IndexedDB；網頁：僅 sessionStorage */
   async function loadSessionAsync() {
     if (!preferPersistentLogin()) {
       return loadSession();
+    }
+    // 先讀 localStorage（同步、最快），有就立刻還原
+    const fromLs = loadSession();
+    if (fromLs?.token) {
+      try {
+        await idbSet(STORAGE_KEY, JSON.stringify(fromLs));
+      } catch (_) {}
+      return fromLs;
     }
     try {
       const idbRaw = await idbGet(STORAGE_KEY);
       const fromIdb = parseSessionRaw(
         typeof idbRaw === "string" ? idbRaw : null,
-        () => idbRemove(STORAGE_KEY)
+        null,
+        { ignoreExpiry: true }
       );
       if (fromIdb) {
         try {
@@ -194,7 +226,7 @@
         return { ...fromIdb, persistent: true };
       }
     } catch (_) {}
-    return loadSession();
+    return null;
   }
 
   /**
@@ -217,10 +249,18 @@
     const persistent = preferPersistentLogin();
 
     if (persistent) {
+      // 手機：本機不過期；伺服器過期由 refreshMe 判斷
       try {
-        localStorage.setItem(STORAGE_KEY, payload);
-      } catch (_) {}
-      idbSet(STORAGE_KEY, payload).catch(() => {});
+        const durable = { ...data, expiresAt: "" };
+        const durablePayload = JSON.stringify(durable);
+        localStorage.setItem(STORAGE_KEY, durablePayload);
+        idbSet(STORAGE_KEY, durablePayload).catch(() => {});
+      } catch (_) {
+        try {
+          localStorage.setItem(STORAGE_KEY, payload);
+        } catch (__) {}
+        idbSet(STORAGE_KEY, payload).catch(() => {});
+      }
       try {
         sessionStorage.removeItem(TEMP_SESSION_KEY);
       } catch (_) {}
@@ -598,15 +638,15 @@
   async function refreshMe() {
     const session = loadSession();
     if (!session?.token) return null;
+    const keepOnPhone = preferPersistentLogin();
     if (!useRemote() || session.backend === "local") {
       const db = loadLocalUsers();
       const user = db[session.account];
       if (!user) {
-        if (session.backend === "local") {
-          clearSession();
-          return null;
-        }
-        return session;
+        // 手機版：本機帳號庫缺資料也不踢登入（只存 session）
+        if (keepOnPhone || session.backend !== "local") return session;
+        clearSession();
+        return null;
       }
       saveSession({
         ...session,
@@ -620,6 +660,8 @@
       saveSession({ ...session, ...data, backend: "appscript" });
       return loadSession();
     } catch (err) {
+      // 手機版：網路／過期都不清 session，只有使用者點登出才清
+      if (keepOnPhone) return session;
       const msg = String(err?.message || err || "");
       if (
         /未登入|工作階段已過期|帳號不存在|unauthorized|401|禁止/i.test(msg)
@@ -627,7 +669,6 @@
         clearSession();
         return null;
       }
-      // 同一次工作階段內：網路／非 JSON 暫時錯誤仍保留 session
       return session;
     }
   }

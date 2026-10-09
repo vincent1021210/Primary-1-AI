@@ -642,35 +642,29 @@
       applyUserChrome();
       return;
     }
-    setAuthLocked(true);
     syncAuthUiMode();
-    // 手機版：IndexedDB + localStorage 雙讀（關閉 App 仍可還原）
+    // 手機版：有本機 session 就立刻進主畫面（不要先閃登入再等網路）
     const session =
       (await auth.loadSessionAsync?.()) || auth.loadSession?.() || null;
     const allowRestore = Boolean(session?.token);
     // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login',hypothesisId:'B',location:'voice_studio.js:initAuthGate:session',message:'durable session check',data:{allowRestore,hasToken:Boolean(session?.token),persistent:session?.persistent!==false,account:session?.account?String(session.account).slice(0,3)+'***':'',backend:session?.backend||''},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login',hypothesisId:'B',location:'voice_studio.js:initAuthGate:session',message:'durable session check',data:{allowRestore,hasToken:Boolean(session?.token),persistent:session?.persistent!==false,account:session?.account?String(session.account).slice(0,3)+'***':'',backend:session?.backend||'',preferPersistent:Boolean(auth.preferPersistentLogin?.())},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (allowRestore && session?.token) {
-      const me = await auth.refreshMe?.();
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'B',location:'mobile/voice_studio.js:initAuthGate:refreshMe',message:'session refresh result',data:{restored:Boolean(me),account:me?.account?String(me.account).slice(0,3)+'***':'',preferPersistent:Boolean(auth.preferPersistentLogin?.())},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (me) {
-        await unlockAppAfterLogin();
-        // #region agent log
-        fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'E',location:'mobile/voice_studio.js:initAuthGate:unlockMe',message:'unlocked after refreshMe',data:{bodyLocked:document.body.classList.contains('auth-locked')},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return;
+      await unlockAppAfterLogin();
+      // 背景刷新；只有明確未授權才退回登入
+      try {
+        const me = await auth.refreshMe?.();
+        if (!me && !auth.loadSession?.()?.token) {
+          setAuthLocked(true);
+          syncAuthUiMode();
+          return;
+        }
+        applyUserChrome();
+      } catch (_) {
+        /* 網路異常：維持已解鎖 */
       }
-      // refresh 失敗但本機仍有 session：仍解鎖（避免 Apps Script 異常導致被踢出）
-      if (auth.loadSession?.()?.token || session.token) {
-        await unlockAppAfterLogin();
-        // #region agent log
-        fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'C',location:'mobile/voice_studio.js:initAuthGate:unlockSoft',message:'unlocked with cached session',data:{bodyLocked:document.body.classList.contains('auth-locked')},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return;
-      }
+      return;
     }
     setAuthLocked(true);
     // #region agent log
