@@ -52,6 +52,8 @@
     toolsDrawer: document.getElementById("toolsDrawer"),
     settingsDrawer: document.getElementById("settingsDrawer"),
     voiceAssistantToggle: document.getElementById("voiceAssistantToggle"),
+    voiceAssistantToggleMain: document.getElementById("voiceAssistantToggleMain"),
+    voiceAssistBarHint: document.getElementById("voiceAssistBarHint"),
     promptForm: document.getElementById("promptForm"),
     promptInput: document.getElementById("promptInput"),
     btnSend: document.getElementById("btnSend"),
@@ -172,36 +174,37 @@
     }
   }
 
+  function syncVoiceAssistantToggles(enabled) {
+    [els.voiceAssistantToggle, els.voiceAssistantToggleMain].forEach((el) => {
+      if (!el) return;
+      el.checked = enabled;
+      el.setAttribute("aria-checked", enabled ? "true" : "false");
+    });
+  }
+
   function setVoiceAssistantEnabled(on) {
     const enabled = Boolean(on);
     try {
       localStorage.setItem(VOICE_ASSISTANT_KEY, enabled ? "1" : "0");
     } catch (_) {}
-    if (els.voiceAssistantToggle) {
-      els.voiceAssistantToggle.checked = enabled;
-      els.voiceAssistantToggle.setAttribute(
-        "aria-checked",
-        enabled ? "true" : "false"
-      );
-    }
+    syncVoiceAssistantToggles(enabled);
     if (!enabled) {
       if (wantListen || listening || recognition) stopListen();
       setWakeUi("idle");
-      setStatus("語音助理已關閉（可在設定重新開啟）");
+      setStatus("語音助理已關閉（打開上方開關即可）");
     } else {
-      setStatus("語音助理已開啟，可點麥克風啟動");
+      setStatus("語音助理已開啟，請點麥克風啟動「小一小一」");
     }
     applyVoiceAssistantUi();
   }
 
   function applyVoiceAssistantUi() {
     const on = isVoiceAssistantEnabled();
-    if (els.voiceAssistantToggle && els.voiceAssistantToggle.checked !== on) {
-      els.voiceAssistantToggle.checked = on;
-      els.voiceAssistantToggle.setAttribute(
-        "aria-checked",
-        on ? "true" : "false"
-      );
+    syncVoiceAssistantToggles(on);
+    if (els.voiceAssistBarHint) {
+      els.voiceAssistBarHint.textContent = on
+        ? "開啟中：請點下方麥克風，再喊「小一小一」"
+        : "已關閉：打開開關後才能用語音";
     }
     if (els.btnWake) els.btnWake.disabled = !on;
     if (els.btnListen) els.btnListen.disabled = !on;
@@ -2949,9 +2952,17 @@
     else startListen("dictation");
   });
 
-  els.voiceAssistantToggle?.addEventListener("change", () => {
-    setVoiceAssistantEnabled(Boolean(els.voiceAssistantToggle.checked));
-  });
+  function onVoiceAssistantToggleChange(e) {
+    setVoiceAssistantEnabled(Boolean(e?.target?.checked));
+  }
+  els.voiceAssistantToggle?.addEventListener(
+    "change",
+    onVoiceAssistantToggleChange
+  );
+  els.voiceAssistantToggleMain?.addEventListener(
+    "change",
+    onVoiceAssistantToggleChange
+  );
 
   els.btnSpeak.addEventListener("click", speak);
   els.btnStop.addEventListener("click", stopAll);
