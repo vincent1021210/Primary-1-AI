@@ -104,6 +104,10 @@
     return String(global.XIAO_YI_PLATFORM || "").toLowerCase() === "mobile";
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'A',location:'auth.js:boot',message:'auth boot platform',data:{platform:String(global.XIAO_YI_PLATFORM||''),preferPersistent:preferPersistentLogin(),hasLs:Boolean(localStorage.getItem(STORAGE_KEY)),hasTemp:Boolean((()=>{try{return sessionStorage.getItem(TEMP_SESSION_KEY)}catch(_){return null}})())},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   function authUrl() {
     return String(cfg().appsScriptAuthUrl || "").trim();
   }
@@ -226,6 +230,9 @@
       } catch (_) {}
       // 網頁版不清除手機版的永久登入殘留，避免同瀏覽器互相踢掉
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'D',location:'auth.js:saveSession',message:'session saved',data:{persistent,platform:String(global.XIAO_YI_PLATFORM||''),account:String(data.account||'').slice(0,3)+'***',backend:data.backend||''},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   }
 
   /** 登出：兩邊工作階段都清（含永久與暫存） */
