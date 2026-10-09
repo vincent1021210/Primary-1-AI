@@ -95,13 +95,22 @@
   /** @type {'dictation' | 'wake'} */
   let listenMode = "dictation";
   let tagQueue = Promise.resolve();
-  const wakeSession = WakeWord.createSession({ timeoutMs: 12000 });
+  const wakeSession = WakeWord.createSession({
+    timeoutMs: WakeWord.AWAKE_TIMEOUT_MS || 20000,
+  });
   /** 防止 stop()/onend 互相觸發造成 aborted 重啟迴圈 */
   let listenGeneration = 0;
   let ignoreEndOnce = false;
   let ttsPausedListen = false;
-  /** 小一說完後 5 秒內可直接說話，會回話／執行指令 */
-  const FOLLOW_UP_MS = 5000;
+  /** 待確認的喚醒指令（湊齊 Android 切段） */
+  let pendingWakeCommand = "";
+  let pendingWakeTimer = null;
+  let pendingWokeWaitTimer = null;
+  /** 小一說完後可直接續說的時間 */
+  const FOLLOW_UP_MS_DESKTOP = 8000;
+  const FOLLOW_UP_MS_MOBILE = 15000;
+  const COMMIT_MS_DESKTOP = 1200;
+  const COMMIT_MS_MOBILE = 2400;
   /** 結果面板顯示 5 秒後自動消失 */
   const SEARCH_PANEL_AUTO_HIDE_MS = 0; // 0 = 不自動隱藏
   let searchPanelHideTimer = null;
@@ -618,16 +627,81 @@
   }
 
   function appendFinal(text) {
-    AutoTag.pushChunk(tagState, text, onFlushRaw, 900);
+    // 手機停頓較長，加長累積避免句子被提早切斷
+    AutoTag.pushChunk(tagState, text, onFlushRaw, isMobileOrTwa() ? 1600 : 900);
   }
 
-  /** 說完／打斷後開啟 5 秒續聽，使用者說話小一就回話 */
+  function followUpMs() {
+    return isMobileOrTwa() ? FOLLOW_UP_MS_MOBILE : FOLLOW_UP_MS_DESKTOP;
+  }
+
+  function commitMs() {
+    return isMobileOrTwa() ? COMMIT_MS_MOBILE : COMMIT_MS_DESKTOP;
+  }
+
+  function clearPendingWakeCommit() {
+    if (pendingWakeTimer) {
+      clearTimeout(pendingWakeTimer);
+      pendingWakeTimer = null;
+    }
+    pendingWakeCommand = "";
+  }
+
+  function clearPendingWokeWait() {
+    if (pendingWokeWaitTimer) {
+      clearTimeout(pendingWokeWaitTimer);
+      pendingWokeWaitTimer = null;
+    }
+  }
+
+  /** 延遲送出指令，讓切成多段的語音有時間湊齊 */
+  function scheduleWakeCommandCommit(command, wakeWord) {
+    const merged = WakeWord.mergeSpeechFragments
+      ? WakeWord.mergeSpeechFragments(pendingWakeCommand, command)
+      : String(command || "").trim();
+    if (!merged) return;
+    pendingWakeCommand = merged;
+    clearPendingWokeWait();
+    if (typeof WakeWord.armTimeout === "function") {
+      WakeWord.armTimeout(wakeSession, onWakeTimeout);
+    }
+    setBadge("awake", "聽取中");
+    setWakeUi("awake", pendingWakeCommand);
+    els.interim.textContent = `聽取中：${pendingWakeCommand}…`;
+    setStatus("還在聽，說完後稍等一下就會執行…");
+
+    if (pendingWakeTimer) clearTimeout(pendingWakeTimer);
+    pendingWakeTimer = setTimeout(() => {
+      pendingWakeTimer = null;
+      const finalCmd = pendingWakeCommand;
+      pendingWakeCommand = "";
+      WakeWord.sleep(wakeSession);
+      els.interim.textContent = "";
+      if (isUnclearCommand(finalCmd)) {
+        askPleaseRepeat();
+      } else {
+        executeCommand(finalCmd);
+      }
+      setTimeout(() => {
+        if (navConfirm.active) return;
+        if (wakeSession.isAwake) return;
+        if (wantListen && listenMode === "wake") {
+          setWakeUi("listening");
+          setBadge("listening", "喚醒監聽");
+        }
+      }, 800);
+    }, commitMs());
+  }
+
+  /** 說完／打斷後開啟續聽，使用者說話小一就回話 */
   function armFollowUpAfterSpeak() {
     if (!(wantListen && listenMode === "wake")) return;
     if (typeof WakeWord.openFollowUp !== "function") return;
+    const ms = followUpMs();
+    const sec = Math.round(ms / 1000);
     WakeWord.openFollowUp(
       wakeSession,
-      FOLLOW_UP_MS,
+      ms,
       () => {
         setWakeUi("listening");
         setBadge("listening", "喚醒監聽");
@@ -637,9 +711,9 @@
       wakeSession.wakeWord || "小一小一"
     );
     setWakeUi("awake", "");
-    setBadge("awake", "續聽 5 秒");
-    setStatus("請在 5 秒內繼續說指令，小一會回話");
-    els.interim.textContent = "續聽中（5 秒）…";
+    setBadge("awake", `續聽 ${sec} 秒`);
+    setStatus(`請在 ${sec} 秒內繼續說指令，小一會回話`);
+    els.interim.textContent = `續聽中（${sec} 秒）…`;
   }
 
   /** 手動停止朗讀（按鈕）；已取消語音打斷 */
@@ -1954,45 +2028,46 @@
         setBadge("awake", "已喚醒");
         setWakeUi("awake", "");
         els.interim.textContent = "已喚醒，請繼續說指令（可分開說）…";
-        setStatus("已喚醒，正在等待你的指令…");
+        setStatus("已喚醒，請繼續說完整指令…");
+        // 延遲追問：避免 Android 把「小一小一＋指令」切段時，先回覆打斷後半句
         if (out.kind === "woke_wait" && result.isFinal) {
+          clearPendingWokeWait();
           const wake = String(out.wakeWord || wakeSession.wakeWord || "");
-          // 「你好」→ 回「你好」；「小一小一」且後半段沒聽清 → 主動請重講
-          const name = currentUserLabel();
-          const prefix =
-            name && name !== "你好" ? `${name}，` : "";
-          if (/^你好$|^您好$/.test(wake)) {
-            speakText(`${prefix}你好`);
-          } else {
-            speakText(
-              `${prefix}在！請問您說什麼？我剛剛沒有聽清楚。`
-            );
-          }
+          pendingWokeWaitTimer = setTimeout(() => {
+            pendingWokeWaitTimer = null;
+            if (pendingWakeCommand || !wakeSession.isAwake) return;
+            if (navConfirm.active) return;
+            const name = currentUserLabel();
+            const prefix =
+              name && name !== "你好" ? `${name}，` : "";
+            if (/^你好$|^您好$/.test(wake)) {
+              speakText(`${prefix}你好`);
+            } else {
+              speakText(`${prefix}在！請說完整指令，例如導航或查天氣。`);
+            }
+          }, commitMs() + 400);
         }
         break;
 
       case "command_partial":
-        setBadge("awake", "已喚醒");
-        setWakeUi("awake", out.coreCommand);
-        els.interim.textContent = `已喚醒｜核心命令：${out.coreCommand}`;
+        scheduleWakeCommandCommit(
+          out.coreCommand,
+          out.wakeWord || wakeSession.wakeWord
+        );
+        // interim 也延長等待；final 再重設計時器湊齊後段
+        if (!result.isFinal && out.coreCommand) {
+          setBadge("awake", "聽取中");
+          setWakeUi("awake", out.coreCommand);
+          els.interim.textContent = `聽取中：${out.coreCommand}…`;
+        }
         break;
 
       case "command_final":
-        els.interim.textContent = "";
-        if (isUnclearCommand(out.coreCommand)) {
-          askPleaseRepeat();
-        } else {
-          executeCommand(out.coreCommand);
-        }
-        // 執行後回到待命（導航確認中除外；說完後會再開 5 秒續聽）
-        setTimeout(() => {
-          if (navConfirm.active) return;
-          if (wakeSession.isAwake) return;
-          if (wantListen && listenMode === "wake") {
-            setWakeUi("listening");
-            setBadge("listening", "喚醒監聽");
-          }
-        }, 800);
+        // 相容舊路徑：同樣走延遲確認
+        scheduleWakeCommandCommit(
+          out.coreCommand,
+          out.wakeWord || wakeSession.wakeWord
+        );
         break;
 
       default:
@@ -2223,11 +2298,12 @@
       }
       els.interim.textContent = "";
       if (wantListen && !skipRestart) {
+        const restartDelay = isMobileOrTwa() ? 120 : 350;
         setTimeout(() => {
           if (wantListen && generation === listenGeneration) {
             startListen(listenMode, true);
           }
-        }, 400);
+        }, restartDelay);
       } else if (!wantListen) {
         refreshAiStatus();
         setBadge("", "就緒");
@@ -2433,6 +2509,8 @@
   function stopListen() {
     wantListen = false;
     ttsPausedListen = false;
+    clearPendingWakeCommit();
+    clearPendingWokeWait();
     WakeWord.sleep(wakeSession);
     if (recognition) {
       ignoreEndOnce = true;

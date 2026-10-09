@@ -19,7 +19,21 @@
   ];
 
   /** 喚醒後等待指令的時間（毫秒） */
-  const AWAKE_TIMEOUT_MS = 12000;
+  const AWAKE_TIMEOUT_MS = 20000;
+
+  /** 合併 Android 常切成多段的辨識結果 */
+  function mergeSpeechFragments(prev, next) {
+    const ca = cleanText(prev);
+    const cb = cleanText(next);
+    if (!ca) return cb || String(next || "").trim();
+    if (!cb) return ca;
+    if (cb.includes(ca)) return cb;
+    if (ca.includes(cb)) return ca;
+    for (let n = Math.min(ca.length, cb.length); n >= 2; n--) {
+      if (ca.endsWith(cb.slice(0, n))) return ca + cb.slice(n);
+    }
+    return ca + cb;
+  }
 
   function cleanText(text) {
     return String(text || "").replace(/[\s，,。．？?、！!：:；;]/g, "");
@@ -130,31 +144,28 @@
         return { kind: isFinal ? "ignore" : "listening", transcript: text };
       }
 
-      // 同一句就有命令
+      // 同一句就有命令：先累積，交由前端延遲確認（Android 常切段）
       if (found.coreCommand) {
-        if (isFinal) {
-          sleep(session);
-          return {
-            kind: "command_final",
-            coreCommand: found.coreCommand,
-            wakeWord: found.wakeWord,
-          };
-        }
         wake(session, found.wakeWord, onTimeout);
-        session.commandBuffer = found.coreCommand;
+        session.commandBuffer = mergeSpeechFragments(
+          session.commandBuffer,
+          found.coreCommand
+        );
         return {
           kind: "command_partial",
-          coreCommand: found.coreCommand,
+          coreCommand: session.commandBuffer,
           wakeWord: found.wakeWord,
+          readyToCommit: Boolean(isFinal),
         };
       }
 
-      // 只有喚醒詞 → 進入等待下一句
+      // 只有喚醒詞 → 進入等待下一句（final 也不立刻追問，避免切段時搶答）
       wake(session, found.wakeWord, onTimeout);
       return {
         kind: isFinal ? "woke_wait" : "woke",
         wakeWord: found.wakeWord,
         coreCommand: "",
+        readyToCommit: false,
       };
     }
 
@@ -171,23 +182,14 @@
       return { kind: "woke_wait", wakeWord: session.wakeWord, coreCommand: "" };
     }
 
-    session.commandBuffer = command;
+    session.commandBuffer = mergeSpeechFragments(session.commandBuffer, command);
 
-    if (isFinal) {
-      const finalCmd = command;
-      const wakeWord = session.wakeWord || found?.wakeWord || "小一小一";
-      sleep(session);
-      return {
-        kind: "command_final",
-        coreCommand: finalCmd,
-        wakeWord,
-      };
-    }
-
+    // 不再於 isFinal 立刻結束：等前端 debounce 湊齊片段
     return {
       kind: "command_partial",
-      coreCommand: command,
-      wakeWord: session.wakeWord,
+      coreCommand: session.commandBuffer,
+      wakeWord: session.wakeWord || found?.wakeWord || "小一小一",
+      readyToCommit: Boolean(isFinal),
     };
   }
 
@@ -397,6 +399,7 @@
     WAKE_WORDS,
     AWAKE_TIMEOUT_MS,
     cleanText,
+    mergeSpeechFragments,
     findWake,
     extractFromTranscript: (t) => {
       const f = findWake(t);
@@ -407,6 +410,7 @@
     createSession,
     sleep,
     wake,
+    armTimeout,
     openFollowUp,
     processResult,
     isSelfIntroIntent,
