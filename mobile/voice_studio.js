@@ -110,6 +110,8 @@
   let recognition = null;
   let listening = false;
   let wantListen = false;
+  /** Screen Wake Lock：App 開著時防休眠，才能持續喊「小一小一」 */
+  let screenWakeLock = null;
   /** 打字對話：只顯示文字、不朗讀 */
   let silentChat = false;
   /** @type {'dictation' | 'wake'} */
@@ -169,8 +171,8 @@
     // #endregion
     if (els.wakeStatus) {
       const map = {
-        idle: "待命：說「小一小一」或「你好」後再下指令",
-        listening: "監聽中：請說「小一小一」或「你好」…",
+        idle: "待命：點麥克風啟動常亮守護後，說「小一小一」",
+        listening: "常亮守護中：隨時可說「小一小一」或「你好」…",
         awake: "已喚醒：正在聽取核心命令…",
         done: "已擷取命令",
       };
@@ -586,6 +588,34 @@
       }
       els.authSendCodeBtn.textContent = `${left}s 後可重寄`;
     }, 1000);
+  }
+
+  async function requestScreenWakeLock() {
+    if (!navigator.wakeLock?.request) return false;
+    try {
+      if (screenWakeLock) {
+        try {
+          await screenWakeLock.release();
+        } catch (_) {}
+        screenWakeLock = null;
+      }
+      screenWakeLock = await navigator.wakeLock.request("screen");
+      screenWakeLock.addEventListener("release", () => {
+        screenWakeLock = null;
+      });
+      return true;
+    } catch (_) {
+      screenWakeLock = null;
+      return false;
+    }
+  }
+
+  async function releaseScreenWakeLock() {
+    if (!screenWakeLock) return;
+    try {
+      await screenWakeLock.release();
+    } catch (_) {}
+    screenWakeLock = null;
   }
 
   async function unlockAppAfterLogin() {
@@ -2700,6 +2730,16 @@
       return;
     }
 
+    // 喚醒模式：鎖定螢幕常亮，避免 Android 休眠切斷麥克風（類導航機模式）
+    if (mode === "wake") {
+      const locked = await requestScreenWakeLock();
+      if (!isRestart && !locked) {
+        setStatus("無法鎖定螢幕常亮，請保持畫面開啟並勿鎖屏");
+      }
+    } else {
+      await releaseScreenWakeLock();
+    }
+
     // 結束舊實例時標記忽略 onend，避免 aborted 重啟風暴
     if (recognition) {
       ignoreEndOnce = true;
@@ -2720,9 +2760,12 @@
       if (!isRestart) {
         setStatus(
           mode === "wake"
-            ? "降噪監聽中：請說「小一小一」或「你好」"
+            ? screenWakeLock
+              ? "常亮守護中：隨時喊「小一小一」或「你好」（請保持 App 畫面開啟）"
+              : "監聽中：請說「小一小一」或「你好」（建議保持畫面開啟）"
             : "降噪聽寫中…"
         );
+        if (mode === "wake") setWakeUi("listening");
       }
     } catch (err) {
       // #region agent log
@@ -2730,6 +2773,7 @@
       // #endregion
       setStatus(`無法啟動：${err.message || err}`);
       wantListen = false;
+      releaseScreenWakeLock();
       updateListenButtons();
     }
   }
@@ -2740,6 +2784,7 @@
     clearSpeechPuzzle();
     clearPendingWokeWait();
     WakeWord.sleep(wakeSession);
+    releaseScreenWakeLock();
     if (recognition) {
       ignoreEndOnce = true;
       listenGeneration += 1;
@@ -2821,6 +2866,14 @@
   els.btnWake.addEventListener("click", () => {
     if (wantListen && listenMode === "wake") stopListen();
     else startListen("wake");
+  });
+
+  // 回到前景時：若仍在喚醒監聽，重新申請螢幕常亮（系統可能已釋放）
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (wantListen && listenMode === "wake") {
+      requestScreenWakeLock();
+    }
   });
 
   els.btnListen.addEventListener("click", () => {
