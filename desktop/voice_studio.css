@@ -244,27 +244,6 @@ body.auth-locked .app {
   display: none !important;
 }
 
-.auth-keep-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 2px 8px;
-  font-size: 13px;
-  color: #5f6368;
-  cursor: pointer;
-  user-select: none;
-}
-
-.auth-keep-row[hidden] {
-  display: none !important;
-}
-
-.auth-keep-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
-
 .auth-code-row:not([hidden]) {
   display: flex;
   align-items: flex-end;

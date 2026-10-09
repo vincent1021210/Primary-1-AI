@@ -5,77 +5,24 @@
 (function (global) {
   const STORAGE_KEY = "xiaoYiAuthSession";
   const TEMP_SESSION_KEY = "xiaoYiAuthSessionTemp";
-  const KEEP_LOGIN_KEY = "xiaoYiKeepLoggedIn";
-  const IDB_NAME = "xiaoYiAuthDB";
-  const IDB_STORE = "kv";
   const LOCAL_USERS_KEY = "xiaoYiUsersDB";
   const LOCAL_HISTORY_KEY = "xiaoYiHistoryDB";
   const LOCAL_PENDING_KEY = "xiaoYiPendingReg";
   const MIN_PASSWORD_LEN = 8;
 
-  /** IndexedDB：TWA／Android 關閉 App 後比純 localStorage 更穩（非 chrome.storage，TWA 無該 API） */
-  function openIdb() {
-    return new Promise((resolve, reject) => {
-      if (!global.indexedDB) {
-        resolve(null);
-        return;
+  /** 清除舊版「保持登入」殘留（localStorage／IndexedDB） */
+  function purgeLegacyPersistentSession() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("xiaoYiKeepLoggedIn");
+    } catch (_) {}
+    try {
+      if (global.indexedDB?.deleteDatabase) {
+        global.indexedDB.deleteDatabase("xiaoYiAuthDB");
       }
-      const req = indexedDB.open(IDB_NAME, 1);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(IDB_STORE)) {
-          db.createObjectStore(IDB_STORE);
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-    });
+    } catch (_) {}
   }
 
-  async function idbSet(key, value) {
-    const db = await openIdb();
-    if (!db) return false;
-    return new Promise((resolve) => {
-      try {
-        const tx = db.transaction(IDB_STORE, "readwrite");
-        tx.objectStore(IDB_STORE).put(value, key);
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = () => resolve(false);
-      } catch (_) {
-        resolve(false);
-      }
-    });
-  }
-
-  async function idbGet(key) {
-    const db = await openIdb();
-    if (!db) return null;
-    return new Promise((resolve) => {
-      try {
-        const tx = db.transaction(IDB_STORE, "readonly");
-        const req = tx.objectStore(IDB_STORE).get(key);
-        req.onsuccess = () => resolve(req.result ?? null);
-        req.onerror = () => resolve(null);
-      } catch (_) {
-        resolve(null);
-      }
-    });
-  }
-
-  async function idbRemove(key) {
-    const db = await openIdb();
-    if (!db) return;
-    return new Promise((resolve) => {
-      try {
-        const tx = db.transaction(IDB_STORE, "readwrite");
-        tx.objectStore(IDB_STORE).delete(key);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve();
-      } catch (_) {
-        resolve();
-      }
-    });
-  }
   const SECURITY_QUESTIONS = [
     "你小學班導的名字？",
     "你第一隻寵物叫什麼？",
@@ -130,90 +77,22 @@
     }
   }
 
-  function loadSessionSync() {
-    // 1) 臨時工作階段（未勾選保持登入）
-    try {
-      const temp = parseSessionRaw(sessionStorage.getItem(TEMP_SESSION_KEY), () =>
-        sessionStorage.removeItem(TEMP_SESSION_KEY)
-      );
-      if (temp) return { ...temp, persistent: false };
-    } catch (_) {}
-
-    // 2) localStorage 長效
-    const persistent = parseSessionRaw(localStorage.getItem(STORAGE_KEY), () =>
-      localStorage.removeItem(STORAGE_KEY)
-    );
-    if (persistent) return { ...persistent, persistent: true };
-    return null;
-  }
-
   function loadSession() {
-    return loadSessionSync();
-  }
-
-  /** 非同步：優先 IndexedDB（Android TWA 關閉 App 後仍在），再 fallback localStorage */
-  async function loadSessionAsync() {
     try {
       const temp = parseSessionRaw(sessionStorage.getItem(TEMP_SESSION_KEY), () =>
         sessionStorage.removeItem(TEMP_SESSION_KEY)
       );
       if (temp) return { ...temp, persistent: false };
     } catch (_) {}
-
-    try {
-      const idbRaw = await idbGet(STORAGE_KEY);
-      const fromIdb = parseSessionRaw(
-        typeof idbRaw === "string" ? idbRaw : null,
-        () => idbRemove(STORAGE_KEY)
-      );
-      if (fromIdb) {
-        // 回填 localStorage，方便同步讀取
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(fromIdb));
-        } catch (_) {}
-        return { ...fromIdb, persistent: true };
-      }
-    } catch (_) {}
-
-    const fromLs = parseSessionRaw(localStorage.getItem(STORAGE_KEY), () =>
-      localStorage.removeItem(STORAGE_KEY)
-    );
-    if (fromLs) {
-      // 升級寫入 IndexedDB
-      try {
-        await idbSet(STORAGE_KEY, JSON.stringify(fromLs));
-      } catch (_) {}
-      return { ...fromLs, persistent: true };
-    }
     return null;
   }
 
-  function isKeepLoggedInPreferred() {
-    try {
-      const v = localStorage.getItem(KEEP_LOGIN_KEY);
-      if (v === null || v === undefined || v === "") return true; // 預設勾選
-      return v === "1" || v === "true";
-    } catch (_) {
-      return true;
-    }
+  async function loadSessionAsync() {
+    return loadSession();
   }
 
-  function setKeepLoggedInPreferred(keep) {
-    try {
-      localStorage.setItem(KEEP_LOGIN_KEY, keep ? "1" : "0");
-    } catch (_) {}
-  }
-
-  /**
-   * @param {object} session
-   * @param {{ persistent?: boolean }} [options] persistent=true 寫入 IndexedDB+localStorage
-   */
-  function saveSession(session, options = {}) {
-    const persistent =
-      options.persistent !== undefined
-        ? Boolean(options.persistent)
-        : isKeepLoggedInPreferred();
-
+  /** 僅寫入 sessionStorage；關閉 App／分頁後需重新登入 */
+  function saveSession(session) {
     if (!session?.token) {
       clearSession();
       return;
@@ -225,39 +104,22 @@
       expiresAt: session.expiresAt || "",
       backend: session.backend || (useRemote() ? "appscript" : "local"),
     };
-    const payload = JSON.stringify(data);
-
-    setKeepLoggedInPreferred(persistent);
+    purgeLegacyPersistentSession();
     try {
-      sessionStorage.removeItem(TEMP_SESSION_KEY);
+      sessionStorage.setItem(TEMP_SESSION_KEY, JSON.stringify(data));
     } catch (_) {}
-
-    if (persistent) {
-      try {
-        localStorage.setItem(STORAGE_KEY, payload);
-      } catch (_) {}
-      // 雙寫 IndexedDB：關閉 Android TWA 後仍保留
-      idbSet(STORAGE_KEY, payload).catch(() => {});
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-      idbRemove(STORAGE_KEY).catch(() => {});
-      try {
-        sessionStorage.setItem(TEMP_SESSION_KEY, payload);
-      } catch (_) {}
-    }
   }
 
   function clearSession() {
-    localStorage.removeItem(STORAGE_KEY);
     try {
       sessionStorage.removeItem(TEMP_SESSION_KEY);
     } catch (_) {}
-    idbRemove(STORAGE_KEY).catch(() => {});
+    purgeLegacyPersistentSession();
   }
 
   /**
    * 是否允許自動還原登入：
-   * - 有臨時／長效 session 可還原時為 true
+   * - 同一次瀏覽工作階段內有 session 可還原時為 true
    * - 或設定檔明確 autoRestoreLogin: true
    */
   function autoRestoreLogin() {
@@ -268,7 +130,6 @@
   /** 清除本機全部帳號／工作階段／歷史／待驗證資料 */
   function clearAllLocalData() {
     clearSession();
-    localStorage.removeItem(KEEP_LOGIN_KEY);
     localStorage.removeItem(LOCAL_USERS_KEY);
     localStorage.removeItem(LOCAL_HISTORY_KEY);
     localStorage.removeItem(LOCAL_PENDING_KEY);
@@ -279,11 +140,6 @@
       "xiaoYiPendingReg",
       "xiaoYiKeepLoggedIn",
     ].forEach((k) => localStorage.removeItem(k));
-    try {
-      if (global.indexedDB?.deleteDatabase) {
-        global.indexedDB.deleteDatabase(IDB_NAME);
-      }
-    } catch (_) {}
     return true;
   }
 
@@ -457,19 +313,15 @@
     };
   }
 
-  async function register(account, password, displayName, code, options = {}) {
+  async function register(account, password, displayName, code) {
     const key = normalizeAccount(account);
     const codeStr = String(code || "").trim();
-    const persistent =
-      options.persistent !== undefined
-        ? Boolean(options.persistent)
-        : isKeepLoggedInPreferred();
     if (!isGmail(key)) throw new Error("註冊帳號必須是 Gmail");
     if (!/^\d{6}$/.test(codeStr)) throw new Error("請輸入 6 位數驗證碼");
 
     if (useRemote()) {
       const data = await api("register", { account: key, code: codeStr });
-      saveSession({ ...data, backend: "appscript" }, { persistent });
+      saveSession({ ...data, backend: "appscript" });
       return data;
     }
 
@@ -506,7 +358,7 @@
       expiresAt: new Date(Date.now() + 30 * 864e5).toISOString(),
       backend: "local",
     };
-    saveSession(session, { persistent });
+    saveSession(session);
     return session;
   }
 
@@ -569,12 +421,8 @@
     return { ok: true, account: key, message: "密碼重設成功，請用新密碼登入" };
   }
 
-  async function login(account, password, options = {}) {
+  async function login(account, password) {
     const key = normalizeAccount(account);
-    const persistent =
-      options.persistent !== undefined
-        ? Boolean(options.persistent)
-        : isKeepLoggedInPreferred();
     if (!key) throw new Error("請輸入帳號（Gmail）");
     if (String(password || "").length < MIN_PASSWORD_LEN) {
       throw new Error(`密碼至少 ${MIN_PASSWORD_LEN} 個字`);
@@ -582,7 +430,7 @@
 
     if (useRemote()) {
       const data = await api("login", { account: key, password });
-      saveSession({ ...data, backend: "appscript" }, { persistent });
+      saveSession({ ...data, backend: "appscript" });
       return data;
     }
 
@@ -599,7 +447,7 @@
       expiresAt: new Date(Date.now() + 30 * 864e5).toISOString(),
       backend: "local",
     };
-    saveSession(session, { persistent });
+    saveSession(session);
     return session;
   }
 
@@ -614,47 +462,38 @@
   }
 
   async function refreshMe() {
-    const session = (await loadSessionAsync()) || loadSession();
+    const session = loadSession();
     if (!session?.token) return null;
-    const persistent = session.persistent !== false;
     if (!useRemote() || session.backend === "local") {
       const db = loadLocalUsers();
       const user = db[session.account];
       if (!user) {
-        // 本機帳號庫被清掉才失效；遠端帳號不走這條
         if (session.backend === "local") {
           clearSession();
           return null;
         }
         return session;
       }
-      saveSession(
-        {
-          ...session,
-          displayName: user.displayName || session.account,
-          backend: "local",
-        },
-        { persistent }
-      );
+      saveSession({
+        ...session,
+        displayName: user.displayName || session.account,
+        backend: "local",
+      });
       return loadSession();
     }
     try {
       const data = await api("me", { token: session.token });
-      saveSession(
-        { ...session, ...data, backend: "appscript" },
-        { persistent }
-      );
+      saveSession({ ...session, ...data, backend: "appscript" });
       return loadSession();
     } catch (err) {
       const msg = String(err?.message || err || "");
-      // 明確未授權才清掉；網路／非 JSON 等暫時錯誤要保留登入（Android TWA 常見）
       if (
         /未登入|工作階段已過期|帳號不存在|unauthorized|401|禁止/i.test(msg)
       ) {
         clearSession();
         return null;
       }
-      // 離線／Apps Script 異常：仍用本機快取 session 維持登入
+      // 同一次工作階段內：網路／非 JSON 暫時錯誤仍保留 session
       return session;
     }
   }
@@ -707,6 +546,9 @@
     );
   }
 
+  // 啟動時清掉舊版保持登入殘留
+  purgeLegacyPersistentSession();
+
   // clearAuthDataOnce: true，或網址加 ?clearAuth=1，載入時清空本機全部帳號
   try {
     const q = String(global.location?.search || "");
@@ -741,7 +583,5 @@
     clearSession,
     clearAllLocalData,
     autoRestoreLogin,
-    isKeepLoggedInPreferred,
-    setKeepLoggedInPreferred,
   };
 })(window);

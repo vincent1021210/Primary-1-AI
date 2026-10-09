@@ -82,7 +82,6 @@
     authOk: document.getElementById("authOk"),
     authHint: document.getElementById("authHint"),
     authAccountLabel: document.getElementById("authAccountLabel"),
-    keepLoggedIn: document.getElementById("keepLoggedIn"),
     btnLogout: document.getElementById("btnLogout"),
   };
 
@@ -548,26 +547,12 @@
       if (els.securityQuestionLabel) els.securityQuestionLabel.textContent = "";
     }
 
-    // 保持登入：登入／註冊模式顯示
-    document.querySelectorAll(".auth-login-only").forEach((el) => {
-      if (isForgot) {
-        el.hidden = true;
-        el.setAttribute("hidden", "");
-      } else {
-        el.hidden = false;
-        el.removeAttribute("hidden");
-      }
-    });
-    if (els.keepLoggedIn && window.XiaoYiAuth?.isKeepLoggedInPreferred) {
-      els.keepLoggedIn.checked = window.XiaoYiAuth.isKeepLoggedInPreferred();
-    }
-
     if (els.authHint) {
       els.authHint.textContent = isForgot
         ? "答對安全問題即可在本機重設密碼（無需寄信）"
         : isReg
           ? "註冊需 Gmail 驗證碼與安全問題；密碼至少 8 碼"
-          : "勾選「保持登入」會寫入 IndexedDB，關閉 App 仍保持登入";
+          : "關閉 App 後需重新登入";
     }
     setAuthError("");
     setAuthOk("");
@@ -3073,16 +3058,10 @@
     setAuthError("");
     setAuthOk("");
     try {
-      const persistent = els.keepLoggedIn
-        ? Boolean(els.keepLoggedIn.checked)
-        : true;
-      window.XiaoYiAuth?.setKeepLoggedInPreferred?.(persistent);
       if (authMode === "register") {
-        await window.XiaoYiAuth.register(account, password, displayName, code, {
-          persistent,
-        });
+        await window.XiaoYiAuth.register(account, password, displayName, code);
       } else {
-        await window.XiaoYiAuth.login(account, password, { persistent });
+        await window.XiaoYiAuth.login(account, password);
       }
       els.authPassword.value = "";
       if (els.authCode) els.authCode.value = "";

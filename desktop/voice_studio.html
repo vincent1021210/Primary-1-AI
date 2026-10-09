@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=77" />
+    <link rel="stylesheet" href="voice_studio.css?v=79" />
   </head>
   <body class="auth-locked">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -134,10 +134,6 @@
             發送驗證碼
           </button>
         </div>
-        <label class="auth-keep-row auth-login-only" for="keepLoggedIn">
-          <input type="checkbox" id="keepLoggedIn" checked />
-          <span>保持登入狀態</span>
-        </label>
         <p id="authError" class="auth-error" hidden></p>
         <p id="authOk" class="auth-ok" hidden></p>
         <button
@@ -434,12 +430,12 @@
     <script src="config.deploy.js?v=68"></script>
     <!-- 本機才有；GitHub Pages 沒有此檔屬正常 -->
     <script src="config.local.js?v=68" onerror="/* optional */"></script>
-    <script src="auth.js?v=78"></script>
+    <script src="auth.js?v=79"></script>
     <script src="auto_tag.js?v=42"></script>
     <script src="wake_word.js?v=72"></script>
     <script src="gemini_tagger.js?v=68"></script>
     <script type="module" src="webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=78"></script>
+    <script src="voice_studio.js?v=79"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
