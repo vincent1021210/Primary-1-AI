@@ -150,20 +150,47 @@
     if (!url) {
       throw new Error("尚未設定 appsScriptAuthUrl（請見 config.local.js）");
     }
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, ...payload }),
-    });
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'A',location:'auth.js:api:start',message:'auth api call start',data:{action:String(action||''),urlHost:(()=>{try{return new URL(url).host}catch(_){return'bad-url'}})(),urlEndsExec:/\/exec\/?$/.test(url),payloadKeys:Object.keys(payload||{})},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, ...payload }),
+        redirect: "follow",
+      });
+    } catch (netErr) {
+      // #region agent log
+      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'D',location:'auth.js:api:fetch-fail',message:'auth fetch network error',data:{action:String(action||''),error:String(netErr&&netErr.message||netErr)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      throw new Error(`無法連線帳號服務：${netErr?.message || netErr}`);
+    }
     const text = await res.text();
+    const head = String(text || "").slice(0, 180).replace(/\s+/g, " ");
+    const looksHtml = /<!doctype html|<html|accounts\.google|sign.?in/i.test(
+      text || ""
+    );
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'B',location:'auth.js:api:response',message:'auth api raw response',data:{action:String(action||''),status:res.status,ok:res.ok,finalUrl:String(res.url||'').slice(0,120),contentType:String(res.headers.get('content-type')||''),bodyLen:(text||'').length,looksHtml,bodyHead:head},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     let data;
     try {
       data = JSON.parse(text);
     } catch (_) {
+      // #region agent log
+      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'C',location:'auth.js:api:parse-fail',message:'auth response not JSON',data:{action:String(action||''),status:res.status,looksHtml,bodyHead:head},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       throw new Error(
-        "Apps Script 回應不是 JSON，請確認已部署為「任何人可存取」"
+        looksHtml
+          ? "Apps Script 回傳登入／授權頁（非 JSON）。請重新部署網頁應用程式，存取權選「任何人」，並確認網址結尾是 /exec"
+          : "Apps Script 回應不是 JSON，請確認已部署為「任何人可存取」"
       );
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'E',location:'auth.js:api:parsed',message:'auth api parsed JSON',data:{action:String(action||''),ok:Boolean(data&&data.ok),error:String((data&&data.error)||'').slice(0,120),keys:data&&typeof data==='object'?Object.keys(data):[]},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!data?.ok) {
       throw new Error(data?.error || "請求失敗");
     }
