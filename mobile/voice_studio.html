@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=92" />
+    <link rel="stylesheet" href="voice_studio.css?v=93" />
   </head>
   <body class="auth-locked platform-mobile">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -442,19 +442,20 @@
                 關閉
               </button>
             </div>
-            <label class="setting-switch" for="voiceAssistantToggle">
+            <div class="setting-switch">
               <span class="setting-switch-text">
                 <strong>語音助理</strong>
-                <small>開啟後可錄音送給 Gemini 理解並回覆</small>
+                <small>開啟後可錄音送給 Gemini 理解並回覆；關閉後停止麥克風與後台聆聽</small>
               </span>
-              <input
-                type="checkbox"
+              <button
+                type="button"
                 id="voiceAssistantToggle"
-                checked
+                class="switch-btn"
                 role="switch"
                 aria-checked="true"
-              />
-            </label>
+                aria-label="語音助理開關"
+              ></button>
+            </div>
             <div class="field" style="margin: 10px 0 4px">
               <label for="geminiKeyInput">Gemini API Key（存在本機）</label>
               <div class="row" style="gap: 8px; align-items: center">
@@ -539,7 +540,7 @@
     <script src="../desktop/wake_word.js?v=87"></script>
     <script src="../desktop/gemini_tagger.js?v=82"></script>
     <script type="module" src="../desktop/webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=94"></script>
+    <script src="voice_studio.js?v=95"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

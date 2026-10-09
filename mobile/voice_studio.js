@@ -165,21 +165,37 @@
     els.status.textContent = msg || "";
   }
 
-  function isVoiceAssistantEnabled() {
+  function readVoiceAssistantPref() {
     try {
       const v = localStorage.getItem(VOICE_ASSISTANT_KEY);
-      if (v === null || v === undefined || v === "") return true;
-      return v === "1" || v === "true";
-    } catch (_) {
-      return true;
-    }
+      if (v === "0" || v === "false") return false;
+      if (v === "1" || v === "true") return true;
+    } catch (_) {}
+    try {
+      const v2 = sessionStorage.getItem(VOICE_ASSISTANT_KEY);
+      if (v2 === "0" || v2 === "false") return false;
+      if (v2 === "1" || v2 === "true") return true;
+    } catch (_) {}
+    return true;
+  }
+
+  function isVoiceAssistantEnabled() {
+    return readVoiceAssistantPref();
   }
 
   function syncVoiceAssistantToggles(enabled) {
     const el = els.voiceAssistantToggle;
     if (!el) return;
-    el.checked = enabled;
     el.setAttribute("aria-checked", enabled ? "true" : "false");
+    if ("checked" in el) el.checked = enabled;
+  }
+
+  function notifyNativeVoiceGuard(enabled) {
+    try {
+      if (window.XiaoYiAndroid?.setVoiceGuardEnabled) {
+        window.XiaoYiAndroid.setVoiceGuardEnabled(Boolean(enabled));
+      }
+    } catch (_) {}
   }
 
   function setVoiceAssistantEnabled(on) {
@@ -187,7 +203,11 @@
     try {
       localStorage.setItem(VOICE_ASSISTANT_KEY, enabled ? "1" : "0");
     } catch (_) {}
+    try {
+      sessionStorage.setItem(VOICE_ASSISTANT_KEY, enabled ? "1" : "0");
+    } catch (_) {}
     syncVoiceAssistantToggles(enabled);
+    notifyNativeVoiceGuard(enabled);
     if (!enabled) {
       if (wantListen || listening || recognition || geminiRecording) stopListen();
       setWakeUi("idle");
@@ -199,7 +219,9 @@
           : "語音助理已開啟，請點麥克風啟動「小一小一」"
       );
     }
-    applyVoiceAssistantUi();
+    if (els.btnWake) els.btnWake.disabled = !enabled;
+    if (els.btnListen) els.btnListen.disabled = !enabled;
+    document.body.classList.toggle("voice-assistant-off", !enabled);
   }
 
   function applyVoiceAssistantUi() {
@@ -208,6 +230,7 @@
     if (els.btnWake) els.btnWake.disabled = !on;
     if (els.btnListen) els.btnListen.disabled = !on;
     document.body.classList.toggle("voice-assistant-off", !on);
+    notifyNativeVoiceGuard(on);
   }
 
   function setBadge(mode, label) {
@@ -3220,13 +3243,13 @@
     else startListen("dictation");
   });
 
-  function onVoiceAssistantToggleChange(e) {
-    setVoiceAssistantEnabled(Boolean(e?.target?.checked));
-  }
-  els.voiceAssistantToggle?.addEventListener(
-    "change",
-    onVoiceAssistantToggleChange
-  );
+  els.voiceAssistantToggle?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = els.voiceAssistantToggle;
+    const nowOn = el?.getAttribute("aria-checked") === "true";
+    setVoiceAssistantEnabled(!nowOn);
+  });
 
   els.btnSpeak.addEventListener("click", speak);
   els.btnStop.addEventListener("click", stopAll);
