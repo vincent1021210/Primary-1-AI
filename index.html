@@ -2,7 +2,6 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="refresh" content="0; url=desktop/voice_studio.html" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
@@ -13,15 +12,24 @@
     <title>小一 · AI 語音助理</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-    <link rel="canonical" href="desktop/voice_studio.html" />
     <script>
-      location.replace("desktop/voice_studio.html");
+      (function () {
+        var ua = navigator.userAgent || "";
+        var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+        var target = mobile
+          ? "mobile/voice_studio.html"
+          : "desktop/voice_studio.html";
+        location.replace(target);
+      })();
     </script>
   </head>
   <body>
     <p>
       正在開啟小一語音助理…
-      <a href="desktop/voice_studio.html">若未自動跳轉請點此</a>
+      <br />
+      <a href="mobile/voice_studio.html">手機版</a>
+      ·
+      <a href="desktop/voice_studio.html">網頁版</a>
     </p>
   </body>
 </html>

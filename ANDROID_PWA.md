@@ -3,6 +3,8 @@
 你的正式 PWA 網址（GitHub Pages）：
 
 - 網站：https://vincent1021210.github.io/Primary-1-AI/
+- 手機版（APK start_url）：https://vincent1021210.github.io/Primary-1-AI/mobile/voice_studio.html
+- 網頁版：https://vincent1021210.github.io/Primary-1-AI/desktop/voice_studio.html
 - Manifest：https://vincent1021210.github.io/Primary-1-AI/manifest.json
 
 ---

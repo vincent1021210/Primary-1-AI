@@ -5,7 +5,7 @@
   "description": "語音／打字助理：天氣、導航、計算、YouTube 播放",
   "lang": "zh-Hant",
   "dir": "ltr",
-  "start_url": "/Primary-1-AI/desktop/voice_studio.html",
+  "start_url": "/Primary-1-AI/mobile/voice_studio.html",
   "scope": "/Primary-1-AI/",
   "display": "standalone",
   "orientation": "portrait-primary",

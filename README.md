@@ -2,13 +2,14 @@
 
 免費語音助理：喚醒詞、Gemini 糾錯、天氣／導航／計算、YouTube 播放、Gmail 註冊登入。
 
-## 網頁版（GitHub Pages）
+## 線上版（GitHub Pages）
 
-**https://vincent1021210.github.io/Primary-1-AI/**
+**https://vincent1021210.github.io/Primary-1-AI/**（依裝置自動導向）
 
-主畫面：
-
-**https://vincent1021210.github.io/Primary-1-AI/desktop/voice_studio.html**
+| 版本 | 網址 |
+|------|------|
+| 手機版（APK／PWA） | https://vincent1021210.github.io/Primary-1-AI/mobile/voice_studio.html |
+| 網頁版（電腦瀏覽器） | https://vincent1021210.github.io/Primary-1-AI/desktop/voice_studio.html |
 
 ### Android APK（免商店下載）
 
@@ -52,6 +53,8 @@ location.reload();
 
 | 路徑 | 說明 |
 |------|------|
-| `desktop/voice_studio.html` | 主畫面 |
+| `mobile/voice_studio.html` | 手機版（看圖、防切斷、TWA） |
+| `desktop/voice_studio.html` | 網頁版（電腦瀏覽器） |
+| `desktop/auth.js` 等 | 共用帳號／Gemini／喚醒模組 |
 | `desktop/apps_script/` | Google 試算表帳號庫 |
 | `extension/` | Chrome 擴充功能（選用） |
