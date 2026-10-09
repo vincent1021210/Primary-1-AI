@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=90" />
+    <link rel="stylesheet" href="voice_studio.css?v=91" />
   </head>
   <body class="auth-locked platform-mobile">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -416,7 +416,7 @@
           <div class="tools-card">
             <div class="tools-head">
               <strong>工具庫</strong>
-              <button type="button" id="btnCloseTools" class="ghost-btn">關閉</button>
+              <button type="button" id="btnCloseTools" class="ghost-btn drawer-close-btn" aria-label="關閉工具">關閉</button>
             </div>
             <div class="ai-row">
               <button type="button" id="btnTestGemini" class="tool-btn">
@@ -443,10 +443,17 @@
         </section>
 
         <section id="settingsDrawer" class="tools-drawer hidden">
-          <div class="tools-card">
-            <div class="tools-head">
+          <div class="tools-card settings-card">
+            <div class="tools-head settings-head">
               <strong>設定</strong>
-              <button type="button" id="btnCloseSettings" class="ghost-btn">關閉</button>
+              <button
+                type="button"
+                id="btnCloseSettings"
+                class="ghost-btn drawer-close-btn"
+                aria-label="關閉設定"
+              >
+                關閉
+              </button>
             </div>
             <label class="setting-switch" for="voiceAssistantToggle">
               <span class="setting-switch-text">
@@ -545,7 +552,7 @@
     <script src="../desktop/wake_word.js?v=87"></script>
     <script src="../desktop/gemini_tagger.js?v=82"></script>
     <script type="module" src="../desktop/webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=92"></script>
+    <script src="voice_studio.js?v=93"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
