@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b57d0" />
+    <meta
+      name="description"
+      content="下載小一 AI 語音助理 Android App（APK），免商店安裝。"
+    />
+    <title>下載小一 · AI 語音助理</title>
+    <link rel="icon" type="image/png" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f7f9fc;
+        --ink: #1f1f1f;
+        --muted: #5f6368;
+        --accent: #0b57d0;
+        --accent-press: #0842a0;
+        --soft: #d3e3fd;
+        --line: #e0e3e7;
+        --danger: #b3261e;
+        --card: #ffffff;
+        --shadow: 0 1px 2px rgba(60, 64, 67, 0.12),
+          0 8px 28px rgba(60, 64, 67, 0.1);
+        --font: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        font-family: var(--font);
+        color: var(--ink);
+        background:
+          radial-gradient(50% 40% at 25% 10%, var(--soft) 0%, transparent 70%),
+          radial-gradient(45% 35% at 90% 80%, #e8f0fe 0%, transparent 65%),
+          var(--bg);
+        padding: 28px 18px 40px;
+        padding-top: calc(28px + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+      }
+
+      .wrap {
+        width: min(440px, 100%);
+        margin: 0 auto;
+      }
+
+      .brand {
+        text-align: center;
+        margin-bottom: 18px;
+      }
+
+      .brand img {
+        width: 96px;
+        height: 96px;
+        border-radius: 22%;
+        box-shadow: var(--shadow);
+        background: #fff;
+      }
+
+      .brand h1 {
+        margin: 14px 0 6px;
+        font-size: 1.45rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--accent);
+      }
+
+      .brand p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.65;
+      }
+
+      .panel {
+        background: var(--card);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        padding: 22px 20px 20px;
+        margin-top: 8px;
+      }
+
+      .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        text-decoration: none;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.05rem;
+        padding: 15px 18px;
+        border-radius: 999px;
+        border: none;
+        box-shadow: 0 4px 14px rgba(11, 87, 208, 0.28);
+        transition: background 0.15s ease, transform 0.15s ease;
+      }
+
+      .btn:hover {
+        background: var(--accent-press);
+        transform: translateY(-1px);
+      }
+
+      .btn:active {
+        transform: translateY(0);
+      }
+
+      .meta {
+        margin: 12px 0 0;
+        text-align: center;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      .steps {
+        margin-top: 18px;
+        padding: 14px 14px 12px;
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        text-align: left;
+      }
+
+      .steps strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.92rem;
+      }
+
+      .steps ol {
+        margin: 0;
+        padding-left: 1.2rem;
+        color: #3c4043;
+        font-size: 0.86rem;
+        line-height: 1.55;
+      }
+
+      .steps li {
+        margin: 0.55rem 0;
+      }
+
+      .warn {
+        color: var(--danger);
+        font-weight: 700;
+      }
+
+      .qr-block {
+        margin-top: 18px;
+        text-align: center;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+
+      .qr-block img {
+        width: 168px;
+        height: 168px;
+        border-radius: 12px;
+        background: #fff;
+        border: 1px solid var(--line);
+      }
+
+      .qr-block p {
+        margin: 10px 0 0;
+        font-size: 0.82rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .links {
+        margin-top: 16px;
+        text-align: center;
+        font-size: 0.85rem;
+      }
+
+      .links a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .links a:hover {
+        text-decoration: underline;
+      }
+
+      .note {
+        margin-top: 14px;
+        font-size: 0.78rem;
+        color: var(--muted);
+        line-height: 1.55;
+        text-align: center;
+      }
+
+      code {
+        font-family: ui-monospace, Consolas, monospace;
+        background: #eef2f7;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="brand">
+        <img src="icons/icon-512.png" alt="小一助理圖示" width="96" height="96" />
+        <h1>小一 AI 語音助理</h1>
+        <p>
+          嗨，我是小一。這是專屬 Android App（免商店）。
+          <br />
+          安裝後會有獨立圖示，並以全螢幕開啟。
+        </p>
+      </header>
+
+      <section class="panel" aria-label="下載與安裝">
+        <a
+          class="btn"
+          id="downloadBtn"
+          href="downloads/xiao-yi-assistant.apk"
+          download="小一語音助理.apk"
+          type="application/vnd.android.package-archive"
+        >
+          立即下載 Android APK
+        </a>
+        <p class="meta">約 1.4 MB · 套件 com.vincent1021210.primary1ai</p>
+
+        <div class="steps">
+          <strong>輕鬆安裝 3 步驟</strong>
+          <ol>
+            <li>
+              點上方按鈕下載 <code>.apk</code> 檔（建議用手機 Chrome 開啟本頁）。
+            </li>
+            <li>
+              開啟檔案時若出現
+              <span class="warn">「封鎖來自未知來源的應用程式」</span
+              >，請點「設定」。
+            </li>
+            <li>
+              開啟「允許來自此來源的應用程式」，再返回完成安裝。這是 Android
+              一般保護機制，不是病毒警告。
+            </li>
+          </ol>
+        </div>
+
+        <div class="qr-block">
+          <img
+            src="downloads/qr-download.png"
+            alt="掃描下載小一 App 的 QR Code"
+            width="168"
+            height="168"
+          />
+          <p>用另一支手機掃描 QR Code，也能打開本下載頁。</p>
+        </div>
+      </section>
+
+      <p class="links">
+        <a href="desktop/voice_studio.html">先用網頁版試試</a>
+        ·
+        <a href="https://github.com/vincent1021210/Primary-1-AI">GitHub</a>
+      </p>
+      <p class="note">
+        App 本體是 Trusted Web Activity：之後網站功能更新，重新開啟 App
+        就會載入最新版，通常不必重裝 APK。僅在簽章／套件設定變更時才需重新下載。
+      </p>
+    </div>
+  </body>
+</html>

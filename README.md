@@ -10,6 +10,14 @@
 
 **https://vincent1021210.github.io/Primary-1-AI/desktop/voice_studio.html**
 
+### Android APK（免商店下載）
+
+**https://vincent1021210.github.io/Primary-1-AI/download.html**
+
+直接下載：
+
+**https://vincent1021210.github.io/Primary-1-AI/downloads/xiao-yi-assistant.apk**
+
 Manifest（Bubblewrap 用）：
 
 **https://vincent1021210.github.io/Primary-1-AI/manifest.json**

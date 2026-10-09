@@ -89,7 +89,25 @@ https://developers.google.com/digital-asset-links/tools/generator
 
 ---
 
+## 方案 A：網站直接發佈 APK
+
+本倉庫已提供：
+
+| 路徑 | 說明 |
+|------|------|
+| `download.html` | 一鍵下載＋安裝教學＋QR Code |
+| `downloads/xiao-yi-assistant.apk` | 已簽章 APK |
+| `.well-known/assetlinks.json` | 去頂部網址列 |
+
+公開網址：https://vincent1021210.github.io/Primary-1-AI/download.html
+
+GitHub Pages 會以二進位提供 `.apk`；頁面另加 `download` 屬性強制下載。重新打包後請覆蓋 `downloads/xiao-yi-assistant.apk` 再 push。
+
+功能邏輯在網頁端：多數更新只需改網站，使用者重開 App 即生效，不必重裝 APK。
+
+---
+
 ## 注意
 
-- 金鑰倉 `android.keystore` 與密碼勿上傳公開倉庫。
+- 金鑰倉 `android.keystore` 與密碼勿上傳公開倉庫（請留在本機 `Desktop/xiao-yi-android`）。
 - Gemini 金鑰勿寫進 Git；線上請用本機 `localStorage` 設定（見 README）。
