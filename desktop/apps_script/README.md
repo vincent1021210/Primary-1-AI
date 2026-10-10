@@ -53,6 +53,7 @@ window.APP_CONFIG = {
 | `sendRegisterCode` | `{ account, password, displayName? }` 寄 Gmail 驗證碼 |
 | `register` | `{ account, code }` 驗證後建立帳號 |
 | `login` | `{ account, password }` |
+| `googleLogin` | `{ idToken, displayName? }` Google 一鍵登入（後端驗證 ID Token） |
 | `logout` | `{ token }` |
 | `me` | `{ token }` |
 | `appendHistory` | `{ token, line }` |

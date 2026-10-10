@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=90" />
+    <link rel="stylesheet" href="voice_studio.css?v=92" />
     <script>
       // 手機裝置一律進手機版；若有暫存 session 先升成永久再跳轉
       (function () {
@@ -48,6 +48,10 @@
         </div>
         <p class="auth-lead">網頁版 · 登入後即可使用語音助理</p>
         <h2 id="authTitle" class="auth-title">帳號登入</h2>
+        <div id="authGoogleZone" class="auth-google-zone auth-login-only">
+          <div id="googleSignInBtn" class="auth-google-btn" aria-label="使用 Google 登入"></div>
+          <div class="auth-or"><span>或使用帳號密碼</span></div>
+        </div>
         <label class="auth-field">
           <span id="authAccountLabel">帳號（Gmail）</span>
           <input
@@ -170,7 +174,7 @@
           </button>
         </div>
         <p id="authHint" class="auth-hint">
-          註冊需 Gmail 驗證碼、安全問題；密碼至少 8 碼
+          可用 Google 一鍵登入，或 Gmail 註冊（驗證碼＋安全問題）
         </p>
       </div>
     </div>
@@ -479,19 +483,20 @@
       </main>
     </div>
 
-    <script src="config.example.js?v=68"></script>
-    <script src="config.deploy.js?v=68"></script>
+    <script src="config.example.js?v=75"></script>
+    <script src="config.deploy.js?v=75"></script>
     <!-- 本機才有；GitHub Pages 沒有此檔屬正常 -->
-    <script src="config.local.js?v=68" onerror="/* optional */"></script>
+    <script src="config.local.js?v=75" onerror="/* optional */"></script>
     <script>
       window.XIAO_YI_PLATFORM = "desktop";
     </script>
-    <script src="auth.js?v=89"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="auth.js?v=91"></script>
     <script src="auto_tag.js?v=42"></script>
     <script src="wake_word.js?v=72"></script>
     <script src="gemini_tagger.js?v=91"></script>
     <script type="module" src="webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=108"></script>
+    <script src="voice_studio.js?v=110"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

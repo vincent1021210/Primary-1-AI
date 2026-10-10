@@ -16,7 +16,7 @@ function doGet(e) {
     ok: true,
     service: "xiao-yi-auth",
     hint:
-      "POST：sendRegisterCode|register|login|getSecurityQuestion|resetPassword|logout|me|appendHistory|listHistory|geminiAssist",
+      "POST：sendRegisterCode|register|login|googleLogin|getSecurityQuestion|resetPassword|logout|me|appendHistory|listHistory|geminiAssist",
   });
 }
 
@@ -31,6 +31,9 @@ function doPost(e) {
     }
     if (action === "register") return jsonOut_(register_(body));
     if (action === "login") return jsonOut_(login_(body));
+    if (action === "googlelogin" || action === "google_login") {
+      return jsonOut_(googleLogin_(body));
+    }
     if (
       action === "getsecurityquestion" ||
       action === "get_security_question"
@@ -50,6 +53,9 @@ function doPost(e) {
     }
     if (action === "geminiassist" || action === "gemini_assist") {
       return jsonOut_(geminiAssist_(body));
+    }
+    if (action === "debugstats" || action === "debug_stats") {
+      return jsonOut_(debugStats_(body.account));
     }
 
     return jsonOut_({ ok: false, error: "未知 action" });
@@ -492,6 +498,28 @@ function resetPassword_(body) {
   };
 }
 
+/** 除錯用：只回傳帳號數量／是否有某帳號（不含密碼） */
+function debugStats_(optAccount) {
+  var ss = getSpreadsheet_();
+  ensureSheets_(ss);
+  var users = usersSheet_();
+  var sessions = sessionsSheet_();
+  var userCount = Math.max(0, users.getLastRow() - 1);
+  var sessionCount = Math.max(0, sessions.getLastRow() - 1);
+  var account = normalizeAccount_(optAccount || "");
+  var hasAccount = account ? Boolean(findUserRow_(account)) : null;
+  var props = PropertiesService.getScriptProperties();
+  var hasGeminiKey = Boolean(String(props.getProperty("GEMINI_API_KEY") || "").trim());
+  return {
+    ok: true,
+    userCount: userCount,
+    sessionCount: sessionCount,
+    hasAccount: hasAccount,
+    hasGeminiKey: hasGeminiKey,
+    spreadsheetId: ss.getId(),
+  };
+}
+
 function login_(body) {
   var account = normalizeAccount_(body.account);
   var password = String(body.password || "");
@@ -516,6 +544,86 @@ function login_(body) {
     displayName: user.displayName || account,
     token: session.token,
     expiresAt: session.expiresAt,
+  };
+}
+
+/**
+ * Google 一鍵登入：驗證 ID Token → 找不到帳號則自動建立 → 發 session
+ * body: { idToken, displayName? }
+ * 指令碼屬性可設 GOOGLE_CLIENT_ID（與前端一致）
+ */
+function googleLogin_(body) {
+  var idToken = String(body.idToken || body.credential || "").trim();
+  if (!idToken) return { ok: false, error: "缺少 Google 登入憑證" };
+
+  var props = PropertiesService.getScriptProperties();
+  var clientId = String(
+    props.getProperty("GOOGLE_CLIENT_ID") ||
+      "354935544437-1vrje0je178afce6nturpghuu5r16qp6.apps.googleusercontent.com"
+  ).trim();
+
+  var res = UrlFetchApp.fetch(
+    "https://oauth2.googleapis.com/tokeninfo?id_token=" +
+      encodeURIComponent(idToken),
+    { muteHttpExceptions: true }
+  );
+  var code = res.getResponseCode();
+  var raw = res.getContentText() || "{}";
+  var info;
+  try {
+    info = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, error: "無法解析 Google 憑證" };
+  }
+  if (code < 200 || code >= 300) {
+    return {
+      ok: false,
+      error: (info && info.error_description) || "Google 憑證無效或已過期",
+    };
+  }
+  if (String(info.aud || "") !== clientId) {
+    return { ok: false, error: "Google Client ID 不符" };
+  }
+  if (String(info.email_verified) !== "true" && info.email_verified !== true) {
+    return { ok: false, error: "Google 信箱尚未驗證" };
+  }
+
+  var account = normalizeAccount_(info.email);
+  if (!isGmail_(account)) {
+    return { ok: false, error: "請使用 Gmail 帳號登入" };
+  }
+
+  var displayName = String(
+    body.displayName || info.name || account.split("@")[0] || ""
+  ).trim();
+  var user = findUserRow_(account);
+  if (!user) {
+    var salt = randomToken_();
+    var randomPass = randomToken_() + randomToken_();
+    var passwordHash = hashPassword_(randomPass, salt);
+    usersSheet_().appendRow([
+      account,
+      displayName.slice(0, 40),
+      salt,
+      passwordHash,
+      new Date().toISOString(),
+      "(Google 登入)",
+      hashPassword_("google-oauth", salt),
+    ]);
+    user = findUserRow_(account);
+  } else if (displayName && (!user.displayName || user.displayName === account)) {
+    usersSheet_().getRange(user.row, 2).setValue(displayName.slice(0, 40));
+    user.displayName = displayName.slice(0, 40);
+  }
+
+  var session = createSession_(account);
+  return {
+    ok: true,
+    account: account,
+    displayName: (user && user.displayName) || displayName || account,
+    token: session.token,
+    expiresAt: session.expiresAt,
+    via: "google",
   };
 }
 

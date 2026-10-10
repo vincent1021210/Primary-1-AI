@@ -637,6 +637,122 @@
     return session;
   }
 
+  function googleClientId() {
+    return String(cfg().googleClientId || "").trim();
+  }
+
+  /**
+   * 用 Google Identity Services 的 ID Token 向 Apps Script 換小一 session
+   * （勿把 Client Secret 放前端）
+   */
+  async function loginWithGoogleIdToken(idToken, profile = {}) {
+    if (!useRemote()) {
+      throw new Error("Google 登入需設定 appsScriptAuthUrl 後端");
+    }
+    const token = String(idToken || "").trim();
+    if (!token) throw new Error("缺少 Google 登入憑證");
+    const data = await api("googleLogin", {
+      idToken: token,
+      displayName: String(profile.name || profile.displayName || "").trim(),
+    });
+    saveSession({
+      ...data,
+      backend: "appscript",
+      picture: String(profile.picture || "").trim(),
+      persistent: true,
+    });
+    return data;
+  }
+
+  /**
+   * 在容器渲染 Google 登入按鈕；onSuccess(session) / onError(err)
+   */
+  function mountGoogleSignIn(container, { onSuccess, onError } = {}) {
+    const el =
+      typeof container === "string"
+        ? document.querySelector(container)
+        : container;
+    const clientId = googleClientId();
+    if (!el) return () => {};
+    if (!clientId) {
+      el.hidden = true;
+      return () => {};
+    }
+    el.hidden = false;
+
+    const handleCred = async (response) => {
+      try {
+        const cred = String(response?.credential || "").trim();
+        if (!cred) throw new Error("Google 未回傳憑證");
+        // 僅取公開 profile 欄位給顯示用；真實驗證在後端
+        let profile = {};
+        try {
+          const mid = cred.split(".")[1] || "";
+          const b64 = mid.replace(/-/g, "+").replace(/_/g, "/");
+          const json = JSON.parse(
+            decodeURIComponent(
+              atob(b64)
+                .split("")
+                .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                .join("")
+            )
+          );
+          profile = {
+            name: json.name,
+            email: json.email,
+            picture: json.picture,
+          };
+        } catch (_) {}
+        const session = await loginWithGoogleIdToken(cred, profile);
+        if (typeof onSuccess === "function") onSuccess(session, profile);
+      } catch (err) {
+        if (typeof onError === "function") onError(err);
+        else throw err;
+      }
+    };
+
+    const tryRender = () => {
+      const gis = global.google?.accounts?.id;
+      if (!gis) return false;
+      gis.initialize({
+        client_id: clientId,
+        callback: handleCred,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+      el.innerHTML = "";
+      gis.renderButton(el, {
+        theme: "outline",
+        size: "large",
+        shape: "pill",
+        text: "signin_with",
+        locale: "zh-TW",
+        width: Math.min(320, el.clientWidth || 280),
+      });
+      return true;
+    };
+
+    if (!tryRender()) {
+      el.innerHTML =
+        '<p class="auth-hint" style="margin:0">正在載入 Google 登入…</p>';
+      let n = 0;
+      const t = setInterval(() => {
+        n += 1;
+        if (tryRender()) {
+          clearInterval(t);
+          return;
+        }
+        if (n > 40) {
+          clearInterval(t);
+          el.innerHTML =
+            '<p class="auth-hint" style="margin:0;color:#c5221f">Google 登入載入失敗。請確認此網址已加入 OAuth「已授權的 JavaScript 來源」，並重新整理。</p>';
+        }
+      }, 250);
+      return () => clearInterval(t);
+    }
+    return () => {};
+  }
+
   async function logout() {
     const session = loadSession();
     if (session?.token && useRemote()) {
@@ -754,6 +870,9 @@
     sendRegisterCode,
     register,
     login,
+    loginWithGoogleIdToken,
+    mountGoogleSignIn,
+    googleClientId,
     getSecurityQuestion,
     resetPassword,
     logout,

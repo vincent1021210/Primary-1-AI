@@ -5,6 +5,8 @@ window.APP_CONFIG = {
   geminiModel: "gemini-3.1-flash-lite",
   /** true：錄音／文字上傳後端，由伺服器呼叫 Gemini */
   geminiViaBackend: true,
+  /** Google 快速登入 Client ID（公開）；Client Secret 勿放前端 */
+  googleClientId: "",
   /** 未登入時的預設稱呼（登入後改用帳號顯示名稱） */
   displayName: "",
   /**

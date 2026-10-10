@@ -86,6 +86,8 @@
     authOk: document.getElementById("authOk"),
     authHint: document.getElementById("authHint"),
     authAccountLabel: document.getElementById("authAccountLabel"),
+    authGoogleZone: document.getElementById("authGoogleZone"),
+    googleSignInBtn: document.getElementById("googleSignInBtn"),
     btnLogout: document.getElementById("btnLogout"),
     imageInput: document.getElementById("imageInput"),
     uploadImgBtn: document.getElementById("uploadImgBtn"),
@@ -638,6 +640,16 @@
       }
     });
 
+    document.querySelectorAll(".auth-login-only").forEach((el) => {
+      if (!isReg && !isForgot) {
+        el.hidden = false;
+        el.removeAttribute("hidden");
+      } else {
+        el.hidden = true;
+        el.setAttribute("hidden", "");
+      }
+    });
+
     els.authGate?.classList.toggle("is-register", isReg);
     els.authGate?.classList.toggle("is-forgot", isForgot);
 
@@ -652,12 +664,16 @@
       if (els.securityQuestionLabel) els.securityQuestionLabel.textContent = "";
     }
 
+    if (!isReg && !isForgot) {
+      mountGoogleSignInUi();
+    }
+
     if (els.authHint) {
       els.authHint.textContent = isForgot
         ? "答對安全問題即可在本機重設密碼（無需寄信）"
         : isReg
           ? "註冊需 Gmail 驗證碼與安全問題；密碼至少 8 碼"
-          : "手機版：登入一次即可，關閉 App 仍保持；點登出才清除";
+          : "可用 Google 一鍵登入；登入後關閉 App 仍保持";
     }
     setAuthError("");
     setAuthOk("");
@@ -737,6 +753,37 @@
     }
   }
 
+  let googleSignInCleanup = null;
+  function mountGoogleSignInUi() {
+    const auth = window.XiaoYiAuth;
+    if (!auth?.mountGoogleSignIn || !els.googleSignInBtn) return;
+    if (!auth.googleClientId?.()) {
+      if (els.authGoogleZone) els.authGoogleZone.hidden = true;
+      return;
+    }
+    if (typeof googleSignInCleanup === "function") {
+      try {
+        googleSignInCleanup();
+      } catch (_) {}
+    }
+    googleSignInCleanup = auth.mountGoogleSignIn(els.googleSignInBtn, {
+      onSuccess: async () => {
+        setAuthOk("Google 登入成功");
+        setAuthError("");
+        setAuthLocked(false);
+        applyUserChrome();
+        try {
+          await auth.refreshMe?.();
+        } catch (_) {}
+        applyUserChrome();
+      },
+      onError: (err) => {
+        setAuthOk("");
+        setAuthError(err?.message || String(err) || "Google 登入失敗");
+      },
+    });
+  }
+
   async function initAuthGate() {
     const auth = window.XiaoYiAuth;
     // #region agent log
@@ -748,12 +795,6 @@
       // #endregion
       setAuthLocked(false);
       return;
-    }
-    const url = auth.authUrl?.();
-    if (els.authHint) {
-      els.authHint.textContent = url
-        ? "註冊需 Gmail 驗證碼（寄到信箱）；密碼至少 8 碼。資料存在 Google 試算表。"
-        : "本機測試：註冊仍需 Gmail 格式與驗證碼（碼會顯示在畫面上）。部署 Apps Script 後會真的寄信。";
     }
     // 僅明確 requireLogin: false 時跳過登入畫面
     if (!auth.requireLogin?.()) {
@@ -789,6 +830,7 @@
       return;
     }
     setAuthLocked(true);
+    syncAuthUiMode();
     // #region agent log
     fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'B',location:'mobile/voice_studio.js:initAuthGate:stayLocked',message:'stay on login gate',data:{bodyLocked:document.body.classList.contains('auth-locked'),allowRestore,preferPersistent:Boolean(auth.preferPersistentLogin?.()),platform:String(window.XIAO_YI_PLATFORM||'')},timestamp:Date.now()})}).catch(()=>{});
     // #endregion

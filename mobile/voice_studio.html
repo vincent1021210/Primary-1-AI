@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="voice_studio.css?v=93" />
+    <link rel="stylesheet" href="voice_studio.css?v=95" />
   </head>
   <body class="auth-locked platform-mobile">
     <div id="authGate" class="auth-gate" aria-live="polite">
@@ -31,6 +31,10 @@
         </div>
         <p class="auth-lead">登入後即可使用語音助理</p>
         <h2 id="authTitle" class="auth-title">帳號登入</h2>
+        <div id="authGoogleZone" class="auth-google-zone auth-login-only">
+          <div id="googleSignInBtn" class="auth-google-btn" aria-label="使用 Google 登入"></div>
+          <div class="auth-or"><span>或使用帳號密碼</span></div>
+        </div>
         <label class="auth-field">
           <span id="authAccountLabel">帳號（Gmail）</span>
           <input
@@ -153,7 +157,7 @@
           </button>
         </div>
         <p id="authHint" class="auth-hint">
-          註冊需 Gmail 驗證碼、安全問題；密碼至少 8 碼
+          可用 Google 一鍵登入，或 Gmail 註冊（驗證碼＋安全問題）
         </p>
       </div>
     </div>
@@ -518,18 +522,19 @@
     </div>
 
     <!-- 共用模組（帳號／Gemini／喚醒）在 desktop/；本頁僅手機殼層 -->
-    <script src="../desktop/config.example.js?v=73"></script>
-    <script src="../desktop/config.deploy.js?v=73"></script>
-    <script src="../desktop/config.local.js?v=73" onerror="/* optional; APK 不打包此檔 */"></script>
+    <script src="../desktop/config.example.js?v=75"></script>
+    <script src="../desktop/config.deploy.js?v=75"></script>
+    <script src="../desktop/config.local.js?v=75" onerror="/* optional; APK 不打包此檔 */"></script>
     <script>
       window.XIAO_YI_PLATFORM = "mobile";
     </script>
-    <script src="../desktop/auth.js?v=89"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="../desktop/auth.js?v=91"></script>
     <script src="../desktop/auto_tag.js?v=42"></script>
     <script src="../desktop/wake_word.js?v=87"></script>
     <script src="../desktop/gemini_tagger.js?v=91"></script>
     <script type="module" src="../desktop/webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=107"></script>
+    <script src="voice_studio.js?v=110"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
