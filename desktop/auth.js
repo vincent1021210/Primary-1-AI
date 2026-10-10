@@ -406,7 +406,19 @@
     fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'E',location:'auth.js:api:parsed',message:'auth api parsed JSON',data:{action:String(action||''),ok:Boolean(data&&data.ok),error:String((data&&data.error)||'').slice(0,120),keys:data&&typeof data==='object'?Object.keys(data):[]},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (!data?.ok) {
-      throw new Error(data?.error || "請求失敗");
+      const errMsg = String(data?.error || "請求失敗");
+      // 後端拒絕 session：一律清掉本機 token（含手機「保持登入」殘留的舊後端 token）
+      if (
+        /未登入|工作階段已過期|帳號不存在|unauthorized|401/i.test(errMsg) &&
+        /^(me|geminiassist|appendhistory|listhistory)$/i.test(String(action || ""))
+      ) {
+        // #region agent log
+        fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'auth.js:api:clearStaleSession',message:'clearing stale session after backend reject',data:{action:String(action||''),err:errMsg.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        clearSession();
+        throw new Error("登入已失效，請重新登入後再試");
+      }
+      throw new Error(errMsg);
     }
     return data;
   }

@@ -2440,18 +2440,23 @@
   async function applyGeminiAssistResult(result, commandLabel, meta = {}) {
     const actions = result.actions || [];
     let speak = String(result.speak || "").trim();
-    // 前端兜底：若模型仍覆讀「收到，…問題」，改成直接要求再答一次的口語提示
-    if (/^收到[，,!]/.test(speak)) {
-      const stripped = speak.replace(/^收到[，,!]\s*/, "").trim();
+    // 前端兜底：禁止「收到＋覆讀問題」
+    if (/^收到[，,!！]/.test(speak)) {
+      const stripped = speak.replace(/^收到[，,!！]\s*/, "").trim();
+      const cmdFlat = String(commandLabel || "").replace(/\s+/g, "");
+      const stripFlat = stripped.replace(/\s+/g, "");
       if (
         stripped &&
-        String(commandLabel || "").replace(/\s+/g, "").includes(
-          stripped.replace(/\s+/g, "").slice(0, 12)
-        )
+        (cmdFlat.includes(stripFlat.slice(0, 12)) ||
+          stripFlat.includes(cmdFlat.slice(0, 12)))
       ) {
-        speak = "好的，我來想想…請稍等，或再說一次你的問題。";
+        speak = meta.fromText
+          ? "好的，我正在組織內容，請再傳送一次或換個說法。"
+          : "好的，我來想想…請稍等，或再說一次你的問題。";
       } else if (stripped.length > 8) {
-        speak = stripped; // 去掉「收到」客套，留下後面內容
+        speak = stripped;
+      } else {
+        speak = "好的，請再說一次你的問題。";
       }
     }
     const command = String(commandLabel || speak || "").trim();
@@ -2757,13 +2762,14 @@
             return;
           } catch (err) {
             // #region agent log
-            fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:textCatch',message:'text gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
+            fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:textCatch',message:'text gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
             // #endregion
-            setStatus(`小一失敗：${err?.message || err}`);
-            appendChatBubble(
-              "assistant",
-              `抱歉，我剛剛沒想好：${err?.message || "請再輸入一次"}`
-            );
+            const msg = String(err?.message || err);
+            setStatus(`小一失敗：${msg}`);
+            appendChatBubble("assistant", `抱歉：${msg}`);
+            if (/重新登入|登入已失效|未登入|工作階段/i.test(msg)) {
+              document.body?.classList?.add("auth-locked");
+            }
             return;
           }
         }
@@ -2792,10 +2798,18 @@
           return;
         } catch (err) {
           // #region agent log
-          fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:voiceCatch',message:'voice gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:voiceCatch',message:'voice gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
           // #endregion
-          setStatus(`Gemini 失敗：${err?.message || err}`);
-          speakText("抱歉，我剛剛沒想好，請再說一次。");
+          const msg = String(err?.message || err);
+          setStatus(`Gemini 失敗：${msg}`);
+          speakText(
+            /重新登入|登入已失效|未登入|工作階段/i.test(msg)
+              ? "登入已失效，請重新登入後再試。"
+              : "抱歉，我剛剛沒想好，請再說一次。"
+          );
+          if (/重新登入|登入已失效|未登入|工作階段/i.test(msg)) {
+            document.body?.classList?.add("auth-locked");
+          }
           return;
         }
       }

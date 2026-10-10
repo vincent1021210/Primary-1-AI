@@ -2186,7 +2186,7 @@
       return;
     }
 
-    speakText(`收到，${command}`);
+    speakText("好的，讓我想想…");
   }
 
   async function executeCommand(command, options = {}) {
@@ -2208,29 +2208,62 @@
           : `已擷取核心命令：『${command}』`
       );
 
-      // 自我介紹／招呼／清空／朗讀：本機秒回
+      const fromText = Boolean(options.silent || options.fromText);
+
+      // 打字：直接送 Gemini，失敗不覆讀指令
+      if (fromText) {
+        if (intent.type === "clear" || intent.type === "greeting") {
+          await executeCommandLocal(command);
+          return;
+        }
+        if (window.GeminiTagger?.apiKeyPresent?.()) {
+          try {
+            await executeViaGemini(
+              `【文字對話｜無需喚醒詞｜請直接回答】\n${command}`
+            );
+            return;
+          } catch (err) {
+            const msg = String(err?.message || err);
+            setStatus(`小一失敗：${msg}`);
+            appendChatBubble("assistant", `抱歉：${msg}`);
+            if (/重新登入|登入已失效|未登入|工作階段/i.test(msg)) {
+              document.body?.classList?.add("auth-locked");
+            }
+            return;
+          }
+        }
+        await executeCommandLocal(command);
+        return;
+      }
+
+      // 語音：自我介紹／招呼／清空／朗讀本機秒回
       if (
         intent.type === "self_intro" ||
         intent.type === "greeting" ||
         intent.type === "clear" ||
         intent.type === "speak"
       ) {
-        if (intent.type === "speak" && options.silent) {
-          appendChatBubble("assistant", "文字模式中，請用語音喚醒後再說「朗讀」。");
-          setStatus("文字模式不朗讀");
-          return;
-        }
         await executeCommandLocal(command);
         return;
       }
 
-      // 其餘指令：優先 Gemini 大腦（糾錯＋ACTION）；失敗再本機備援
+      // 其餘語音：優先 Gemini；失敗不覆讀「收到＋原句」
       if (window.GeminiTagger?.apiKeyPresent?.()) {
         try {
           await executeViaGemini(command);
           return;
         } catch (err) {
-          setStatus(`Gemini 失敗，改用本機：${err?.message || err}`);
+          const msg = String(err?.message || err);
+          setStatus(`Gemini 失敗：${msg}`);
+          speakText(
+            /重新登入|登入已失效|未登入|工作階段/i.test(msg)
+              ? "登入已失效，請重新登入後再試。"
+              : "抱歉，我剛剛沒想好，請再說一次。"
+          );
+          if (/重新登入|登入已失效|未登入|工作階段/i.test(msg)) {
+            document.body?.classList?.add("auth-locked");
+          }
+          return;
         }
       }
 
