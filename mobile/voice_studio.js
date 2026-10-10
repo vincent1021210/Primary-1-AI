@@ -2550,20 +2550,30 @@
   }
 
   /** Gemini 小一大腦：糾錯＋ACTION＋語音回覆；失敗時拋錯改走本機 */
-  async function executeViaGemini(command) {
+  async function executeViaGemini(command, meta = {}) {
+    const fromText = Boolean(meta.fromText);
     setStatus(
-      pendingVisionImage ? "小一看圖思考中（Gemini）…" : "小一思考中（Gemini）…"
+      pendingVisionImage
+        ? "小一看圖思考中…"
+        : fromText
+          ? "小一思考中…"
+          : "小一思考中（Gemini）…"
     );
     const locText = await resolveLocationTextForGemini();
     const vision = pendingVisionImage
       ? { mimeType: pendingVisionImage.mimeType, data: pendingVisionImage.data }
       : null;
-    const result = await window.GeminiTagger.assist(command, locText, {
+    // 打字：明示無需喚醒詞，直接答
+    const prompt = fromText
+      ? `【文字對話｜無需喚醒詞｜請直接回答】\n${command}`
+      : command;
+    const result = await window.GeminiTagger.assist(prompt, locText, {
       image: vision,
     });
     if (vision) clearPendingVisionImage();
     await applyGeminiAssistResult(result, command, {
       hadVision: Boolean(vision),
+      fromText,
     });
   }
 
@@ -2709,10 +2719,12 @@
           : `已擷取核心命令：『${command}』`
       );
 
+      const fromText = Boolean(options.silent || options.fromText);
+
       // 有附圖時一律走 Gemini 看圖（自我介紹等也不擋）
       if (hasVision && window.GeminiTagger?.apiKeyPresent?.()) {
         try {
-          await executeViaGemini(command);
+          await executeViaGemini(command, { fromText });
           return;
         } catch (err) {
           setStatus(`看圖失敗：${err?.message || err}`);
@@ -2720,23 +2732,51 @@
         }
       }
 
-      // 自我介紹／招呼／清空／朗讀：本機秒回
+      // 打字對話：一般問答直接送 Gemini（不必先說小一小一／你好）
+      // 僅清空／純打招呼走本機；其餘（含寫小說、問答、搜尋意圖）優先 Gemini
+      if (fromText) {
+        if (intent.type === "clear") {
+          await executeCommandLocal(command);
+          return;
+        }
+        if (intent.type === "greeting") {
+          await executeCommandLocal(command);
+          return;
+        }
+        if (intent.type === "speak") {
+          appendChatBubble("assistant", "文字模式中可直接輸入問題，我會用文字回覆。");
+          setStatus("文字模式不朗讀");
+          return;
+        }
+        if (window.GeminiTagger?.apiKeyPresent?.()) {
+          try {
+            await executeViaGemini(command, { fromText: true });
+            return;
+          } catch (err) {
+            setStatus(`小一失敗：${err?.message || err}`);
+            appendChatBubble(
+              "assistant",
+              `抱歉，我剛剛沒想好：${err?.message || "請再輸入一次"}`
+            );
+            return;
+          }
+        }
+        await executeCommandLocal(command);
+        return;
+      }
+
+      // 語音：自我介紹／招呼／清空／朗讀本機秒回
       if (
         intent.type === "self_intro" ||
         intent.type === "greeting" ||
         intent.type === "clear" ||
         intent.type === "speak"
       ) {
-        if (intent.type === "speak" && options.silent) {
-          appendChatBubble("assistant", "文字模式中，請用語音喚醒後再說「朗讀」。");
-          setStatus("文字模式不朗讀");
-          return;
-        }
         await executeCommandLocal(command);
         return;
       }
 
-      // 其餘指令（含寫小說／問答）：強制走 Gemini；失敗也不要「收到＋覆讀」
+      // 其餘語音指令：強制走 Gemini
       if (window.GeminiTagger?.apiKeyPresent?.()) {
         try {
           await executeViaGemini(command);
@@ -3515,12 +3555,17 @@
       setStatus("請輸入內容、傳照片，或按麥克風用語音");
       return;
     }
+    // 打字不必喚醒；若使用者仍打了「小一小一／你好」前綴則自動去掉
+    if (typeof WakeWord?.stripWakePrefix === "function") {
+      const stripped = String(WakeWord.stripWakePrefix(q) || "").trim();
+      if (stripped) q = stripped;
+    }
     pauseWakeForTyping("文字對話中，已停止喚醒監聽");
     if (els.btnSend) els.btnSend.disabled = true;
     els.promptInput.value = "";
     try {
-      // 打字傳送：只顯示回覆，不念出
-      await executeCommand(q, { silent: true });
+      // 打字：直接回答（不念出、不需先說喚醒詞）
+      await executeCommand(q, { silent: true, fromText: true });
     } finally {
       if (els.btnSend) els.btnSend.disabled = false;
       els.promptInput?.focus();
