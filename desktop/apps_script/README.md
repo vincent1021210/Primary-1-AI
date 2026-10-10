@@ -15,18 +15,36 @@
 
 ```js
 window.APP_CONFIG = {
-  geminiApiKey: "你的金鑰",
+  geminiApiKey: "",
   geminiModel: "gemini-3.1-flash-lite",
+  geminiViaBackend: true,
   appsScriptAuthUrl: "https://script.google.com/macros/s/XXXX/exec",
   requireLogin: true,
 };
 ```
 
-7. 重新整理 `voice_studio.html` 後：註冊 → 填 Gmail／密碼 →「發送驗證碼」→ 到信箱輸入 6 碼 →「驗證並註冊」
+7. **設定後端 Gemini 金鑰（必要）**  
+   在 Apps Script 編輯器：**專案設定 → 指令碼屬性** 新增：
+   - `GEMINI_API_KEY`＝你的 AI Studio 金鑰（`AQ.` 或 `AIza`）
+   - `GEMINI_MODEL`＝`gemini-3.1-flash-lite`（可選，有預設值）  
+   然後 **部署 → 管理部署作業 → 編輯 → 新版本 → 部署**（程式碼更新後一定要出新版）。
+
+8. 重新整理 `voice_studio.html` 後：註冊 → 填 Gmail／密碼 →「發送驗證碼」→ 到信箱輸入 6 碼 →「驗證並註冊」
 
 首次使用會自動建立試算表「小一助理帳號庫」（Users / Sessions / History / Pending）。
 
 未設定 `appsScriptAuthUrl` 時為本機測試模式（驗證碼顯示在畫面上，不會真的寄信）。
+
+## 語音流程（後端代理）
+
+```
+手機錄音 → POST geminiAssist（含 base64 音訊 + token）
+         → Apps Script 讀 GEMINI_API_KEY
+         → 呼叫 Gemini 3.1 Flash-Lite
+         → 回傳文字給 App 朗讀／執行動作
+```
+
+注意：錄音請盡量短（約 20 秒內），過長 base64 可能被 Apps Script 拒收。
 
 ## API（POST JSON）
 
@@ -39,5 +57,6 @@ window.APP_CONFIG = {
 | `me` | `{ token }` |
 | `appendHistory` | `{ token, line }` |
 | `listHistory` | `{ token, limit? }` |
+| `geminiAssist` | `{ token, userText?, systemInstruction?, audio?, image?, model? }` 後端呼叫 Gemini |
 
 前端請用 `Content-Type: text/plain;charset=utf-8` 送 JSON，避免 CORS 預檢失敗。

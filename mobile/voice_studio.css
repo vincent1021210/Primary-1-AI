@@ -1509,6 +1509,28 @@ body.voice-assistant-off .voice-assist-bar-text strong {
   line-height: 1.35;
 }
 
+.ai-backend-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #e8f0fe 0%, #f8fafc 100%);
+  border: 1px solid #d2e3fc;
+}
+
+.ai-backend-note strong {
+  font-size: 14px;
+  color: #174ea6;
+}
+
+.ai-backend-note small {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .mic-btn:disabled,
 .tool-btn:disabled {
   opacity: 0.4;

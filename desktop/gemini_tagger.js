@@ -1,6 +1,7 @@
 /**
  * Gemini：智慧標籤 +「小一」語音助理大腦（ACTION 標籤）
- * 金鑰來自 config.local.js，勿提交到版本庫。
+ * 預設：錄音／文字 → Apps Script 後端 → 後端持金鑰呼叫 Gemini 3.1 Flash-Lite
+ * （金鑰放 Script Properties，勿放前端）
  */
 (function (global) {
   const ALLOWED_TAGS = [
@@ -79,18 +80,37 @@
     return global.APP_CONFIG || {};
   }
 
+  function normalizeApiKey(raw) {
+    return String(raw || "")
+      .trim()
+      .replace(/^["'\s]+|["'\s]+$/g, "")
+      .replace(/\s+/g, "");
+  }
+
+  /** 有 Apps Script 網址且未關閉 geminiViaBackend 時走後端 */
+  function useBackend() {
+    const url = String(cfg().appsScriptAuthUrl || "").trim();
+    if (!url) return false;
+    return cfg().geminiViaBackend !== false;
+  }
+
+  /** 僅在關閉後端代理時使用（App 正式流程不讀前端金鑰） */
   function apiKey() {
-    const fromCfg = String(cfg().geminiApiKey || "").trim();
-    if (fromCfg) return fromCfg;
-    try {
-      return String(localStorage.getItem("xiaoYiGeminiApiKey") || "").trim();
-    } catch (_) {
-      return "";
-    }
+    if (useBackend()) return "";
+    return normalizeApiKey(cfg().geminiApiKey || "");
+  }
+
+  function looksLikeGeminiKey(key) {
+    return /^(AQ\.|AIza)/.test(String(key || ""));
   }
 
   function modelId() {
     return String(cfg().geminiModel || "gemini-3.1-flash-lite").trim();
+  }
+
+  function canCallGemini() {
+    if (useBackend()) return Boolean(cfg().appsScriptAuthUrl);
+    return Boolean(apiKey());
   }
 
   function emit() {
@@ -103,13 +123,18 @@
   }
 
   function getState() {
-    const key = apiKey();
+    const ready = canCallGemini() && status !== "error" && status !== "missing";
     return {
-      status: !key ? "missing" : status === "idle" ? "ready" : status,
-      ready: Boolean(key) && status !== "error" && status !== "missing",
+      status: !canCallGemini()
+        ? "missing"
+        : status === "idle"
+          ? "ready"
+          : status,
+      ready,
       lastError,
       modelId: modelId(),
-      provider: "gemini",
+      provider: useBackend() ? "gemini-backend" : "gemini",
+      viaBackend: useBackend(),
     };
   }
 
@@ -175,10 +200,46 @@
     return { actions, speak, raw: text };
   }
 
+  async function callGeminiViaBackend({
+    userText,
+    systemInstruction,
+    temperature = 0.3,
+    maxOutputTokens = 256,
+    image = null,
+    audio = null,
+  }) {
+    const auth = global.XiaoYiAuth;
+    if (!auth?.api || !auth?.loadSession) {
+      throw new Error("帳號模組未載入，無法連後端");
+    }
+    if (!auth.authUrl?.()) {
+      throw new Error("尚未設定 appsScriptAuthUrl");
+    }
+    const session = auth.loadSession();
+    if (!session?.token) {
+      throw new Error("請先登入後再使用語音助理");
+    }
+    const data = await auth.api("geminiAssist", {
+      token: session.token,
+      userText: userText || "",
+      systemInstruction: systemInstruction || "",
+      temperature,
+      maxOutputTokens,
+      model: modelId(),
+      audio: audio?.data
+        ? { mimeType: audio.mimeType || "audio/wav", data: audio.data }
+        : null,
+      image: image?.data
+        ? { mimeType: image.mimeType || "image/jpeg", data: image.data }
+        : null,
+    });
+    return String(data.text || "").trim();
+  }
+
   /**
-   * @param {{ userText: string, systemInstruction?: string, temperature?: number, maxOutputTokens?: number, image?: { mimeType: string, data: string } | null, audio?: { mimeType: string, data: string } | null }} opts
+   * 本機直連（僅備援；預設不走這條）
    */
-  async function callGeminiStudio({
+  async function callGeminiDirect({
     userText,
     systemInstruction,
     temperature = 0.3,
@@ -187,10 +248,19 @@
     audio = null,
   }) {
     const key = apiKey();
+    if (!key) {
+      throw new Error("尚未設定 Gemini API Key（請到設定貼上）");
+    }
+    if (!looksLikeGeminiKey(key)) {
+      throw new Error(
+        "金鑰格式不正確：請到 Google AI Studio 建立金鑰（應為 AQ. 或 AIza 開頭）"
+      );
+    }
     const model = modelId();
+    const useQueryKey = key.startsWith("AIza");
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       model
-    )}:generateContent`;
+    )}:generateContent${useQueryKey ? `?key=${encodeURIComponent(key)}` : ""}`;
 
     const parts = [];
     if (audio?.data && audio?.mimeType) {
@@ -235,10 +305,16 @@
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg = data?.error?.message || `Gemini HTTP ${res.status}`;
+      let msg = data?.error?.message || `Gemini HTTP ${res.status}`;
+      if (
+        res.status === 401 ||
+        /OAuth|ACCESS_TOKEN|UNAUTHENTICATED|API_KEY/i.test(msg)
+      ) {
+        msg =
+          "Gemini 金鑰無效。後端模式請更新 Apps Script 的 GEMINI_API_KEY。";
+      }
       const err = new Error(msg);
       err.status = res.status;
-      err.payload = data;
       throw err;
     }
 
@@ -246,12 +322,20 @@
     return outParts.map((p) => p.text || "").join("").trim();
   }
 
+  /**
+   * @param {{ userText: string, systemInstruction?: string, temperature?: number, maxOutputTokens?: number, image?: { mimeType: string, data: string } | null, audio?: { mimeType: string, data: string } | null }} opts
+   */
+  async function callGeminiStudio(opts) {
+    if (useBackend()) return callGeminiViaBackend(opts);
+    return callGeminiDirect(opts);
+  }
+
   async function tag(text) {
     const original = String(text || "").trim();
     if (!original) return "";
-    if (!apiKey()) {
+    if (!canCallGemini()) {
       status = "missing";
-      lastError = "尚未設定 Gemini API Key";
+      lastError = "AI 後端未就緒";
       emit();
       return "";
     }
@@ -286,9 +370,6 @@ ${original}`;
 
   /**
    * 小一大腦：糾錯＋ACTION 標籤＋口語回覆（可附圖片／語音多模態）
-   * @param {string} userText
-   * @param {string} [locationText] 例："24.81, 120.97（新竹）"
-   * @param {{ image?: { mimeType: string, data: string } | null, audio?: { mimeType: string, data: string } | null }} [options]
    */
   async function assist(userText, locationText, options = {}) {
     const original = String(userText || "").trim();
@@ -297,9 +378,9 @@ ${original}`;
     if (!original && !image?.data && !audio?.data) {
       return { actions: [], speak: "", raw: "" };
     }
-    if (!apiKey()) {
+    if (!canCallGemini()) {
       status = "missing";
-      lastError = "尚未設定 Gemini API Key";
+      lastError = "AI 後端未就緒，請先登入";
       emit();
       throw new Error(lastError);
     }
@@ -345,7 +426,7 @@ ${original}`;
     return () => listeners.delete(fn);
   }
 
-  if (apiKey()) status = "ready";
+  if (canCallGemini()) status = "ready";
   else status = "missing";
 
   global.GeminiTagger = {
@@ -354,7 +435,8 @@ ${original}`;
     parseAssistResponse,
     getState,
     onChange,
-    apiKeyPresent: () => Boolean(apiKey()),
+    apiKeyPresent: () => canCallGemini(),
+    useBackend,
     ASSIST_SYSTEM_PROMPT,
   };
 })(typeof window !== "undefined" ? window : globalThis);

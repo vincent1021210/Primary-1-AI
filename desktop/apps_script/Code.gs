@@ -16,7 +16,7 @@ function doGet(e) {
     ok: true,
     service: "xiao-yi-auth",
     hint:
-      "POST：sendRegisterCode|register|login|getSecurityQuestion|resetPassword|logout|me|appendHistory|listHistory",
+      "POST：sendRegisterCode|register|login|getSecurityQuestion|resetPassword|logout|me|appendHistory|listHistory|geminiAssist",
   });
 }
 
@@ -47,6 +47,9 @@ function doPost(e) {
     }
     if (action === "listhistory" || action === "list_history") {
       return jsonOut_(listHistory_(body));
+    }
+    if (action === "geminiassist" || action === "gemini_assist") {
+      return jsonOut_(geminiAssist_(body));
     }
 
     return jsonOut_({ ok: false, error: "未知 action" });
@@ -567,6 +570,165 @@ function listHistory_(body) {
     }
   }
   return { ok: true, items: rows };
+}
+
+/**
+ * 語音／文字／圖片 → 後端持金鑰呼叫 Gemini 3.1 Flash-Lite
+ * 金鑰請放「專案設定 → 指令碼屬性」：GEMINI_API_KEY（必要）、GEMINI_MODEL（可選）
+ *
+ * body: {
+ *   token, userText?, systemInstruction?, temperature?, maxOutputTokens?,
+ *   audio?: { mimeType, data }, image?: { mimeType, data }, model?
+ * }
+ */
+function geminiAssist_(body) {
+  var session = resolveSession_(body.token);
+  if (!session) return { ok: false, error: "未登入或工作階段已過期" };
+
+  var props = PropertiesService.getScriptProperties();
+  var key = String(props.getProperty("GEMINI_API_KEY") || "").trim();
+  if (!key) {
+    return {
+      ok: false,
+      error:
+        "後端尚未設定 GEMINI_API_KEY。請在 Apps Script「專案設定 → 指令碼屬性」新增後重新部署。",
+    };
+  }
+
+  var model = String(
+    props.getProperty("GEMINI_MODEL") ||
+      body.model ||
+      "gemini-3.1-flash-lite"
+  ).trim();
+  if (!model) model = "gemini-3.1-flash-lite";
+
+  var userText = String(body.userText || "").trim();
+  var audio = body.audio && typeof body.audio === "object" ? body.audio : null;
+  var image = body.image && typeof body.image === "object" ? body.image : null;
+  var audioData = audio && audio.data ? String(audio.data) : "";
+  var imageData = image && image.data ? String(image.data) : "";
+
+  if (!userText && !audioData && !imageData) {
+    return { ok: false, error: "缺少文字、語音或圖片" };
+  }
+  // Apps Script 請求體有限：過長 base64 會失敗
+  if (audioData.length > 2500000) {
+    return { ok: false, error: "錄音太長，請縮短到約 20 秒內再試" };
+  }
+  if (imageData.length > 2500000) {
+    return { ok: false, error: "圖片太大，請換較小的照片再試" };
+  }
+
+  var parts = [];
+  if (audioData) {
+    parts.push({
+      inlineData: {
+        mimeType: String(audio.mimeType || "audio/wav"),
+        data: audioData,
+      },
+    });
+  }
+  if (imageData) {
+    parts.push({
+      inlineData: {
+        mimeType: String(image.mimeType || "image/jpeg"),
+        data: imageData,
+      },
+    });
+  }
+  if (userText) parts.push({ text: userText });
+
+  var temperature = Number(body.temperature);
+  if (isNaN(temperature)) temperature = 0.3;
+  var maxOutputTokens = Number(body.maxOutputTokens);
+  if (isNaN(maxOutputTokens) || maxOutputTokens < 16) maxOutputTokens = 400;
+
+  var payload = {
+    contents: [{ role: "user", parts: parts }],
+    generationConfig: {
+      temperature: temperature,
+      maxOutputTokens: maxOutputTokens,
+    },
+  };
+  var sys = String(body.systemInstruction || "").trim();
+  if (sys) {
+    payload.systemInstruction = { parts: [{ text: sys }] };
+  }
+
+  var url =
+    "https://generativelanguage.googleapis.com/v1beta/models/" +
+    encodeURIComponent(model) +
+    ":generateContent";
+
+  var res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    headers: { "x-goog-api-key": key },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+
+  var code = res.getResponseCode();
+  var raw = res.getContentText() || "{}";
+  var data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, error: "Gemini 回應不是 JSON（HTTP " + code + "）" };
+  }
+
+  if (code < 200 || code >= 300) {
+    var msg =
+      (data.error && data.error.message) || "Gemini HTTP " + code;
+    if (
+      code === 401 ||
+      /OAuth|ACCESS_TOKEN|UNAUTHENTICATED|API_KEY/i.test(String(msg))
+    ) {
+      msg =
+        "後端 Gemini 金鑰無效或已撤銷。請在 Apps Script 指令碼屬性更新 GEMINI_API_KEY。";
+    }
+    return { ok: false, error: msg, status: code };
+  }
+
+  var outParts =
+    data.candidates &&
+    data.candidates[0] &&
+    data.candidates[0].content &&
+    data.candidates[0].content.parts
+      ? data.candidates[0].content.parts
+      : [];
+  var text = "";
+  for (var i = 0; i < outParts.length; i++) {
+    if (outParts[i] && outParts[i].text) text += outParts[i].text;
+  }
+  text = String(text || "").trim();
+
+  return {
+    ok: true,
+    text: text,
+    model: model,
+    account: session.account,
+  };
+}
+
+/**
+ * 在編輯器執行一次：設定後端 Gemini 金鑰（不會出現在前端）。
+ * 用法：選取函式 setupGeminiKey → 執行，或 clasp run（勿把金鑰提交 git）
+ */
+function setupGeminiKey() {
+  var uiKey = ""; // 若用編輯器執行，請先把金鑰貼在下一行再執行，跑完請清空
+  // 例：uiKey = "AQ.xxxx";
+  var props = PropertiesService.getScriptProperties();
+  if (!uiKey) {
+    var existing = props.getProperty("GEMINI_API_KEY");
+    return existing
+      ? "已有 GEMINI_API_KEY（長度 " + String(existing).length + "），模型=" +
+          (props.getProperty("GEMINI_MODEL") || "gemini-3.1-flash-lite")
+      : "尚未設定：請在函式內填 uiKey 後再執行，或到「專案設定 → 指令碼屬性」新增 GEMINI_API_KEY";
+  }
+  props.setProperty("GEMINI_API_KEY", String(uiKey).trim());
+  props.setProperty("GEMINI_MODEL", "gemini-3.1-flash-lite");
+  return "已寫入 GEMINI_API_KEY / GEMINI_MODEL";
 }
 
 /**

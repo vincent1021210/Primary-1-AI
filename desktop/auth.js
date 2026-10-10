@@ -738,6 +738,7 @@
     requireLogin,
     useRemote,
     preferPersistentLogin,
+    api,
     sendRegisterCode,
     register,
     login,

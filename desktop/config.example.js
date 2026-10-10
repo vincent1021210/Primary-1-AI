@@ -1,8 +1,10 @@
-// 複製成 config.local.js 後填入你的金鑰與 Apps Script 網址
+// 複製成 config.local.js（本機開發用；APK 不打包此檔）
 window.APP_CONFIG = {
+  /** App 不使用前端金鑰；請只放 Apps Script 指令碼屬性 GEMINI_API_KEY */
   geminiApiKey: "",
-  /** Google AI：gemini-3.1-flash-lite（文字／語音／圖片多模態） */
   geminiModel: "gemini-3.1-flash-lite",
+  /** true：錄音／文字上傳後端，由伺服器呼叫 Gemini */
+  geminiViaBackend: true,
   /** 未登入時的預設稱呼（登入後改用帳號顯示名稱） */
   displayName: "",
   /**

@@ -52,9 +52,6 @@
     toolsDrawer: document.getElementById("toolsDrawer"),
     settingsDrawer: document.getElementById("settingsDrawer"),
     voiceAssistantToggle: document.getElementById("voiceAssistantToggle"),
-    geminiKeyInput: document.getElementById("geminiKeyInput"),
-    btnSaveGeminiKey: document.getElementById("btnSaveGeminiKey"),
-    geminiKeyHint: document.getElementById("geminiKeyHint"),
     promptForm: document.getElementById("promptForm"),
     promptInput: document.getElementById("promptInput"),
     btnSend: document.getElementById("btnSend"),
@@ -290,15 +287,11 @@
     const webllm = window.WebLLMTagger?.getState?.();
 
     if (gemini?.ready) {
-      els.aiStatus.textContent = `Gemini 已設定（${gemini.modelId}）`;
+      els.aiStatus.textContent = "小一 AI 已連線（伺服器）";
       if (els.modelChip) {
-        const mid = String(gemini.modelId || "");
-        els.modelChip.textContent = /flash-lite/i.test(mid)
-          ? "3.1 Flash-Lite"
-          : /flash/i.test(mid)
-            ? "Flash"
-            : "Gemini";
-        els.modelChip.title = mid || "gemini-3.1-flash-lite";
+        const mid = String(gemini.modelId || "gemini-3.1-flash-lite");
+        els.modelChip.textContent = "小一 AI";
+        els.modelChip.title = mid;
       }
       if (els.btnLoadAi) {
         els.btnLoadAi.textContent = "載入 WebLLM 備援（可選）";
@@ -357,7 +350,7 @@
 
   async function testGemini() {
     if (!window.GeminiTagger?.apiKeyPresent?.()) {
-      setStatus("尚未設定 Gemini API Key");
+      setStatus("AI 後端未就緒，請確認已登入");
       return;
     }
     setStatus("正在測試 Gemini 小一大腦…");
@@ -2337,7 +2330,7 @@
 
   async function startGeminiVoiceRecord() {
     if (!window.GeminiTagger?.apiKeyPresent?.()) {
-      throw new Error("尚未設定 Gemini API Key");
+      throw new Error("AI 後端未就緒，請先登入");
     }
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       throw new Error("此裝置不支援錄音");
@@ -2402,8 +2395,8 @@
       setBadge("", "就緒");
       return;
     }
-    setStatus("小一聽取中（Gemini）…");
-    setBadge("listening", "思考中");
+    setStatus("錄音上傳後端中…");
+    setBadge("listening", "上傳中");
     setWakeUi("awake");
     try {
       const mime = String(mimeType || "audio/webm").split(";")[0] || "audio/webm";
@@ -2412,6 +2405,8 @@
         ? { mimeType: pendingVisionImage.mimeType, data: pendingVisionImage.data }
         : null;
       const audioPayload = await blobToGeminiAudio(blob, mime);
+      setStatus("後端詢問 Gemini 中…");
+      setBadge("listening", "思考中");
       const result = await window.GeminiTagger.assist(
         "請仔細聆聽這段語音，自動忽略雜音、糾正錯字，依系統指令輸出 ACTION 與口語回覆。",
         locText,
@@ -2436,7 +2431,7 @@
       notifyNativeAudioFocus(false);
       appendChatBubble(
         "assistant",
-        `抱歉，小一大腦連線失敗：${err?.message || "請檢查網路後再說一次"}｜synth=${typeof synth}｜android=${Boolean(window.XiaoYiAndroid)}`
+        `抱歉，小一大腦連線失敗：${err?.message || "請檢查網路後再說一次"}`
       );
     }
   }
@@ -3488,45 +3483,11 @@
     if (e.target === els.settingsDrawer) closeDrawer(els.settingsDrawer);
   });
 
-  function syncGeminiKeyUi() {
-    const present = Boolean(window.GeminiTagger?.apiKeyPresent?.());
-    if (els.geminiKeyHint) {
-      els.geminiKeyHint.textContent = present
-        ? "已設定：麥克風錄音會送 Gemini 理解並回覆"
-        : "未設定：請貼上金鑰，語音才能送 Gemini";
-    }
-    if (els.geminiKeyInput && !els.geminiKeyInput.value) {
-      try {
-        const k = localStorage.getItem("xiaoYiGeminiApiKey") || "";
-        if (k) els.geminiKeyInput.placeholder = "•••• 已儲存（可貼新金鑰覆蓋）";
-      } catch (_) {}
-    }
-  }
-  els.btnSaveGeminiKey?.addEventListener("click", () => {
-    const key = String(els.geminiKeyInput?.value || "").trim();
-    try {
-      if (key) {
-        localStorage.setItem("xiaoYiGeminiApiKey", key);
-        if (window.APP_CONFIG) window.APP_CONFIG.geminiApiKey = key;
-      } else {
-        localStorage.removeItem("xiaoYiGeminiApiKey");
-        if (window.APP_CONFIG) window.APP_CONFIG.geminiApiKey = "";
-      }
-    } catch (err) {
-      setStatus(`無法儲存金鑰：${err?.message || err}`);
-      return;
-    }
-    if (els.geminiKeyInput) els.geminiKeyInput.value = "";
-    syncGeminiKeyUi();
-    applyVoiceAssistantUi();
-    setWakeUi("idle");
-    setStatus(
-      key
-        ? "Gemini 金鑰已儲存：點麥克風即可錄音送出"
-        : "已清除 Gemini 金鑰"
-    );
-  });
-  syncGeminiKeyUi();
+  // 清除舊版本機金鑰殘留（金鑰只存在後端）
+  try {
+    localStorage.removeItem("xiaoYiGeminiApiKey");
+    if (window.APP_CONFIG) window.APP_CONFIG.geminiApiKey = "";
+  } catch (_) {}
 
   els.modelChip?.addEventListener("click", () => openDrawer(els.toolsDrawer));
 

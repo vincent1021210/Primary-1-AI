@@ -445,7 +445,7 @@
             <div class="setting-switch">
               <span class="setting-switch-text">
                 <strong>語音助理</strong>
-                <small>開啟後可錄音送給 Gemini 理解並回覆；關閉後停止麥克風與後台聆聽</small>
+                <small>開啟後可喚醒／錄音，由伺服器呼叫 Gemini 回覆；關閉後停止麥克風與後台聆聽</small>
               </span>
               <button
                 type="button"
@@ -456,22 +456,11 @@
                 aria-label="語音助理開關"
               ></button>
             </div>
-            <div class="field" style="margin: 10px 0 4px">
-              <label for="geminiKeyInput">Gemini API Key（存在本機）</label>
-              <div class="row" style="gap: 8px; align-items: center">
-                <input
-                  id="geminiKeyInput"
-                  type="password"
-                  autocomplete="off"
-                  placeholder="貼上金鑰後按儲存"
-                  style="flex: 1; min-width: 0"
-                />
-                <button type="button" id="btnSaveGeminiKey" class="ghost-btn">
-                  儲存
-                </button>
-              </div>
-              <small id="geminiKeyHint" class="hint" style="display: block; margin-top: 4px"
-                >未設定時語音無法送 Gemini</small
+            <div class="ai-backend-note" aria-label="AI 說明">
+              <strong>小一大腦</strong>
+              <small
+                >錄音與指令會送到伺服器，由 Gemini 3.1 Flash-Lite
+                理解並回覆。無需在 App 輸入或下載任何 API 金鑰。</small
               >
             </div>
             <div class="row">
@@ -529,18 +518,18 @@
     </div>
 
     <!-- 共用模組（帳號／Gemini／喚醒）在 desktop/；本頁僅手機殼層 -->
-    <script src="../desktop/config.example.js?v=69"></script>
-    <script src="../desktop/config.deploy.js?v=69"></script>
-    <script src="../desktop/config.local.js?v=69" onerror="/* optional */"></script>
+    <script src="../desktop/config.example.js?v=73"></script>
+    <script src="../desktop/config.deploy.js?v=73"></script>
+    <script src="../desktop/config.local.js?v=73" onerror="/* optional; APK 不打包此檔 */"></script>
     <script>
       window.XIAO_YI_PLATFORM = "mobile";
     </script>
-    <script src="../desktop/auth.js?v=86"></script>
+    <script src="../desktop/auth.js?v=88"></script>
     <script src="../desktop/auto_tag.js?v=42"></script>
     <script src="../desktop/wake_word.js?v=87"></script>
-    <script src="../desktop/gemini_tagger.js?v=84"></script>
+    <script src="../desktop/gemini_tagger.js?v=88"></script>
     <script type="module" src="../desktop/webllm_tagger.js?v=42"></script>
-    <script src="voice_studio.js?v=99"></script>
+    <script src="voice_studio.js?v=104"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
