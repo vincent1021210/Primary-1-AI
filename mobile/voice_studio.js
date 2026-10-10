@@ -2750,9 +2750,15 @@
         }
         if (window.GeminiTagger?.apiKeyPresent?.()) {
           try {
+            // #region agent log
+            fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'D',location:'voice_studio.js:executeCommand:text',message:'text path before gemini',data:{cmdLen:String(command||'').length,loggedIn:Boolean(window.XiaoYiAuth?.isLoggedIn?.()),hasToken:Boolean(window.XiaoYiAuth?.loadSession?.()?.token),authLocked:document.body?.classList?.contains('auth-locked')},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             await executeViaGemini(command, { fromText: true });
             return;
           } catch (err) {
+            // #region agent log
+            fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:textCatch',message:'text gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             setStatus(`小一失敗：${err?.message || err}`);
             appendChatBubble(
               "assistant",
@@ -2779,9 +2785,15 @@
       // 其餘語音指令：強制走 Gemini
       if (window.GeminiTagger?.apiKeyPresent?.()) {
         try {
+          // #region agent log
+          fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'E',location:'voice_studio.js:executeCommand:voice',message:'voice path before gemini',data:{cmdLen:String(command||'').length,loggedIn:Boolean(window.XiaoYiAuth?.isLoggedIn?.()),hasToken:Boolean(window.XiaoYiAuth?.loadSession?.()?.token),authLocked:document.body?.classList?.contains('auth-locked')},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           await executeViaGemini(command);
           return;
         } catch (err) {
+          // #region agent log
+          fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:voiceCatch',message:'voice gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           setStatus(`Gemini 失敗：${err?.message || err}`);
           speakText("抱歉，我剛剛沒想好，請再說一次。");
           return;
