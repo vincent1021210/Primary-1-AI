@@ -110,6 +110,9 @@
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
   const synth = window.speechSynthesis;
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'A',location:'voice_studio.js:boot',message:'speechSynthesis availability',data:{hasSynth:Boolean(synth),typeofSynth:typeof synth,ua:String(navigator.userAgent||'').slice(0,120),isAndroidNative:Boolean(window.XIAO_YI_ANDROID_NATIVE||window.XiaoYiAndroid)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const tagState = AutoTag.createTaggerState();
 
   let recognition = null;
@@ -905,6 +908,8 @@
         clearPendingWokeWait();
         {
           const wake = String(out.wakeWord || wakeSession.wakeWord || "");
+          const wakeKey = `wake:${wake}`;
+          if (shouldSkipDuplicateCommand(wakeKey)) break;
           pendingWokeWaitTimer = setTimeout(() => {
             pendingWokeWaitTimer = null;
             if (!wakeSession.isAwake || finalTranscriptCache) return;
@@ -1059,7 +1064,10 @@
   function stopSpeaking(reason = "已停止朗讀") {
     ttsPausedListen = false;
     try {
-      synth.cancel();
+      window.XiaoYiAndroid?.stopSpeaking?.();
+    } catch (_) {}
+    try {
+      synth?.cancel?.();
     } catch (_) {}
     if (wantListen && listenMode === "wake") {
       armFollowUpAfterSpeak();
@@ -1101,14 +1109,13 @@
     const finish = () => {
       if (settled) return;
       settled = true;
-      // 朗讀結束 → 還音訊焦點，背景 YouTube／音樂可恢復
+      window.__onNativeTtsDone = null;
       notifyNativeAudioFocus(false);
       if (shouldResume && wantListen) {
         ttsPausedListen = false;
         startListen(listenMode, true);
       }
       if (onDone) onDone();
-      // 說完後 5 秒內說話 → 小一繼續回話／執行（不必再喚醒）
       if (wantListen && listenMode === "wake") {
         armFollowUpAfterSpeak();
       } else if (wantListen) {
@@ -1118,44 +1125,66 @@
       }
     };
 
+    // Android 原生殼優先系統 TextToSpeech（WebView 常無 speechSynthesis）
+    const useNativeTts = Boolean(window.XiaoYiAndroid?.speak);
+    if (useNativeTts) {
+      setBadge("speaking", "朗讀中");
+      window.__onNativeTtsDone = finish;
+      try {
+        window.XiaoYiAndroid.speak(content);
+      } catch (_) {
+        finish();
+        return;
+      }
+      setTimeout(() => {
+        if (!settled) finish();
+      }, Math.min(20000, 2000 + content.length * 180));
+      return;
+    }
+
+    if (!synth) {
+      // 無 TTS：至少顯示文字，絕不丟例外（避免誤觸「收到」備援）
+      setStatus(content);
+      finish();
+      return;
+    }
+
     const startUtter = () => {
       try {
         synth.cancel();
       } catch (_) {}
-      const utter = new SpeechSynthesisUtterance(content);
-      utter.lang = els.lang.value || "zh-TW";
-      utter.rate = Math.min(2, Math.max(0.5, Number(els.rate.value) || 1));
-      const voice = pickVoice(utter.lang);
-      if (voice) {
-        utter.voice = voice;
-        if (voice.lang) utter.lang = voice.lang;
-      }
-      utter.onstart = () => {
-        setBadge("speaking", "朗讀中");
-        notifyNativeAudioFocus(true);
-      };
-      utter.onend = finish;
-      utter.onerror = finish;
       try {
+        const utter = new SpeechSynthesisUtterance(content);
+        utter.lang = els.lang.value || "zh-TW";
+        utter.rate = Math.min(2, Math.max(0.5, Number(els.rate.value) || 1));
+        const voice = pickVoice(utter.lang);
+        if (voice) {
+          utter.voice = voice;
+          if (voice.lang) utter.lang = voice.lang;
+        }
+        utter.onstart = () => {
+          setBadge("speaking", "朗讀中");
+          notifyNativeAudioFocus(true);
+        };
+        utter.onend = finish;
+        utter.onerror = finish;
         synth.speak(utter);
       } catch (_) {
         finish();
       }
-      // Android 部分機種 speak 後短暫無反應，逾時仍恢復監聽
       if (isMobileOrTwa()) {
         setTimeout(() => {
-          if (!settled && !synth.speaking) finish();
+          if (!settled && !synth?.speaking) finish();
         }, 12000);
       }
     };
 
-    // Android Chrome 語音引擎常需等 voiceschanged
-    if (!synth.getVoices?.().length) {
+    if (!synth.getVoices?.()?.length) {
       const onVoices = () => {
-        synth.removeEventListener("voiceschanged", onVoices);
+        synth.removeEventListener?.("voiceschanged", onVoices);
         startUtter();
       };
-      synth.addEventListener("voiceschanged", onVoices);
+      synth.addEventListener?.("voiceschanged", onVoices);
       setTimeout(startUtter, 350);
     } else {
       startUtter();
@@ -2389,19 +2418,25 @@
         { audio: audioPayload, image: vision }
       );
       if (vision) clearPendingVisionImage();
+      // #region agent log
+      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'C',location:'voice_studio.js:sendRecordingToGemini:assistOk',message:'Gemini assist returned',data:{hasSpeak:Boolean(result?.speak),actionCount:(result?.actions||[]).length,speakLen:String(result?.speak||'').length,hasSynth:Boolean(synth)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       await applyGeminiAssistResult(result, result.speak || "語音指令", {
         hadVision: Boolean(vision),
         fromAudio: true,
       });
       setWakeUi("done", result.speak || "");
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'D',location:'voice_studio.js:sendRecordingToGemini:catch',message:'sendRecordingToGemini caught',data:{errMsg:String(err?.message||err),errName:String(err?.name||''),stack:String(err?.stack||'').slice(0,400),hasSynth:Boolean(synth)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setStatus(`語音理解失敗：${err?.message || err}`);
       setBadge("", "就緒");
       setWakeUi("idle");
       notifyNativeAudioFocus(false);
       appendChatBubble(
         "assistant",
-        `抱歉，小一大腦連線失敗：${err?.message || "請檢查網路後再說一次"}`
+        `抱歉，小一大腦連線失敗：${err?.message || "請檢查網路後再說一次"}｜synth=${typeof synth}｜android=${Boolean(window.XiaoYiAndroid)}`
       );
     }
   }
@@ -2409,7 +2444,21 @@
   /** 套用 Gemini ACTION／口語回覆（文字或語音共用） */
   async function applyGeminiAssistResult(result, commandLabel, meta = {}) {
     const actions = result.actions || [];
-    const speak = result.speak || "";
+    let speak = String(result.speak || "").trim();
+    // 前端兜底：若模型仍覆讀「收到，…問題」，改成直接要求再答一次的口語提示
+    if (/^收到[，,!]/.test(speak)) {
+      const stripped = speak.replace(/^收到[，,!]\s*/, "").trim();
+      if (
+        stripped &&
+        String(commandLabel || "").replace(/\s+/g, "").includes(
+          stripped.replace(/\s+/g, "").slice(0, 12)
+        )
+      ) {
+        speak = "好的，我來想想…請稍等，或再說一次你的問題。";
+      } else if (stripped.length > 8) {
+        speak = stripped; // 去掉「收到」客套，留下後面內容
+      }
+    }
     const command = String(commandLabel || speak || "").trim();
 
     writeTagged(
@@ -2612,13 +2661,40 @@
       return;
     }
 
-    speakText(`收到，${command}`);
+    // 禁止鸚鵡學舌「收到，…」；一般問答應走 Gemini
+    speakText("好的，讓我想想…");
+  }
+
+  /** 防重複：同一指令短時間只執行一次（喚醒／原生／拼圖雙觸發） */
+  let lastCommandKey = "";
+  let lastCommandAt = 0;
+  let commandInFlight = false;
+  function shouldSkipDuplicateCommand(command) {
+    const key = String(command || "")
+      .replace(/\s+/g, "")
+      .slice(0, 100);
+    const now = Date.now();
+    if (!key) return true;
+    if (commandInFlight && key === lastCommandKey && now - lastCommandAt < 4000) {
+      return true;
+    }
+    if (key === lastCommandKey && now - lastCommandAt < 2200) {
+      return true;
+    }
+    lastCommandKey = key;
+    lastCommandAt = now;
+    return false;
   }
 
   async function executeCommand(command, options = {}) {
     const prevSilent = silentChat;
     if (options.silent) silentChat = true;
     try {
+      if (shouldSkipDuplicateCommand(command) && !options.force) {
+        setStatus("已忽略重複指令");
+        return;
+      }
+      commandInFlight = true;
       const hasVision = Boolean(pendingVisionImage?.data);
       const intent = WakeWord.classifyCommand(command);
       const line = `[🎯 指令｜${intent.label}${hasVision ? "｜看圖" : ""}] ${command}`;
@@ -2665,18 +2741,21 @@
         return;
       }
 
-      // 其餘指令：優先 Gemini 大腦（糾錯＋ACTION）；失敗再本機備援
+      // 其餘指令（含寫小說／問答）：強制走 Gemini；失敗也不要「收到＋覆讀」
       if (window.GeminiTagger?.apiKeyPresent?.()) {
         try {
           await executeViaGemini(command);
           return;
         } catch (err) {
-          setStatus(`Gemini 失敗，改用本機：${err?.message || err}`);
+          setStatus(`Gemini 失敗：${err?.message || err}`);
+          speakText("抱歉，我剛剛沒想好，請再說一次。");
+          return;
         }
       }
 
       await executeCommandLocal(command);
     } finally {
+      commandInFlight = false;
       silentChat = prevSilent;
     }
   }
@@ -2699,11 +2778,14 @@
   }
 
   function waitVoices() {
-    const list = synth.getVoices();
+    if (!synth?.getVoices) return Promise.resolve([]);
+    const list = synth.getVoices() || [];
     if (list.length) return Promise.resolve(list);
     return new Promise((resolve) => {
-      const done = () => resolve(synth.getVoices());
-      synth.addEventListener("voiceschanged", done, { once: true });
+      const done = () => resolve(synth.getVoices() || []);
+      try {
+        synth.addEventListener("voiceschanged", done, { once: true });
+      } catch (_) {}
       setTimeout(done, 1200);
     });
   }
@@ -2781,7 +2863,8 @@
   }
 
   function pickVoice(lang) {
-    const voices = synth.getVoices();
+    const voices = synth?.getVoices?.() || [];
+    if (!voices.length) return null;
     if (els.voice.value) {
       const exact = voices.find((v) => v.voiceURI === els.voice.value);
       if (exact) return exact;
@@ -3091,12 +3174,19 @@
       await releaseScreenWakeLock();
     }
 
-    // 結束舊實例時標記忽略 onend，避免 aborted 重啟風暴
+    // 先清除再綁定：銷毀舊辨識器，避免後台重進造成雙重監聽
     if (recognition) {
       ignoreEndOnce = true;
       listenGeneration += 1;
       try {
+        recognition.onstart = null;
+        recognition.onend = null;
+        recognition.onresult = null;
+        recognition.onerror = null;
         recognition.stop();
+      } catch (_) {}
+      try {
+        recognition.abort?.();
       } catch (_) {}
       recognition = null;
     }

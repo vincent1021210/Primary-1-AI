@@ -46,6 +46,11 @@
    - 依圖導航： [ACTION_NAV:辨識出的精準地點]
    - 依圖找評測／影片： [ACTION_YOUTUBE:型號或關鍵字＋評測]
 
+# 回覆鐵律（極重要）
+- 絕對不准輸出「收到，…」或把使用者的問題整句覆讀一遍。
+- 必須直接給出答案或執行動作結果。例如「寫 15 字小說」→ 直接寫出約 15 字的小說內容，不要客套。
+- 不要問「請問你可以…」這類反問；你就是小一，直接做。
+
 # 輸出範例
 使用者語音：「導航去逢甲葉式」
 [ACTION_NAV:逢甲夜市]
@@ -61,7 +66,10 @@
 
 使用者：「為什麼天空是藍色的，順便算 1234 乘 56」
 [ACTION_MATH:1234×56=69104]
-天空看起來藍，是因為陽光被大氣散射，藍光比較容易往四面八方散開；1234 乘 56 等於 69104。`;
+天空看起來藍，是因為陽光被大氣散射，藍光比較容易往四面八方散開；1234 乘 56 等於 69104。
+
+使用者：「請問你可以幫我寫15字的小說文嗎」
+夜雨敲窗，他把舊信折好，塞回抽屜最深處。`;
 
   let status = "idle"; // idle | ready | error | missing
   let lastError = "";
@@ -314,7 +322,7 @@ ${original}`;
       const answer = await callGeminiStudio({
         userText: promptText,
         systemInstruction,
-        temperature: 0.4,
+        temperature: 0.3,
         maxOutputTokens: audio?.data || image?.data ? 640 : 400,
         image,
         audio,
