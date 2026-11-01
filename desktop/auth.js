@@ -641,6 +641,40 @@
     return String(cfg().googleClientId || "").trim();
   }
 
+  function googleClientIdAndroid() {
+    return String(cfg().googleClientIdAndroid || "").trim();
+  }
+
+  function hasNativeGoogleSignIn() {
+    try {
+      return typeof global.XiaoYiAndroid?.requestGoogleSignIn === "function";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function decodeIdTokenProfile(credential) {
+    try {
+      const mid = String(credential || "").split(".")[1] || "";
+      const b64 = mid.replace(/-/g, "+").replace(/_/g, "/");
+      const json = JSON.parse(
+        decodeURIComponent(
+          atob(b64)
+            .split("")
+            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join("")
+        )
+      );
+      return {
+        name: json.name,
+        email: json.email,
+        picture: json.picture,
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
   /**
    * 用 Google Identity Services 的 ID Token 向 Apps Script 換小一 session
    * （勿把 Client Secret 放前端）
@@ -674,7 +708,8 @@
         : container;
     const clientId = googleClientId();
     if (!el) return () => {};
-    if (!clientId) {
+    const native = hasNativeGoogleSignIn();
+    if (!native && !clientId) {
       el.hidden = true;
       return () => {};
     }
@@ -684,25 +719,7 @@
       try {
         const cred = String(response?.credential || "").trim();
         if (!cred) throw new Error("Google 未回傳憑證");
-        // 僅取公開 profile 欄位給顯示用；真實驗證在後端
-        let profile = {};
-        try {
-          const mid = cred.split(".")[1] || "";
-          const b64 = mid.replace(/-/g, "+").replace(/_/g, "/");
-          const json = JSON.parse(
-            decodeURIComponent(
-              atob(b64)
-                .split("")
-                .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-                .join("")
-            )
-          );
-          profile = {
-            name: json.name,
-            email: json.email,
-            picture: json.picture,
-          };
-        } catch (_) {}
+        const profile = decodeIdTokenProfile(cred);
         const session = await loginWithGoogleIdToken(cred, profile);
         if (typeof onSuccess === "function") onSuccess(session, profile);
       } catch (err) {
@@ -710,6 +727,36 @@
         else throw err;
       }
     };
+
+    if (native) {
+      el.innerHTML = "";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "auth-google-native";
+      btn.textContent = "使用 Google 登入";
+      btn.addEventListener("click", () => {
+        try {
+          global.__onNativeGoogleIdToken = (idToken, errMsg) => {
+            if (errMsg) {
+              if (typeof onError === "function") {
+                onError(new Error(String(errMsg)));
+              }
+              return;
+            }
+            handleCred({ credential: idToken });
+          };
+          global.XiaoYiAndroid.requestGoogleSignIn();
+        } catch (err) {
+          if (typeof onError === "function") onError(err);
+        }
+      });
+      el.appendChild(btn);
+      return () => {
+        try {
+          delete global.__onNativeGoogleIdToken;
+        } catch (_) {}
+      };
+    }
 
     const tryRender = () => {
       const gis = global.google?.accounts?.id;
@@ -872,6 +919,8 @@
     loginWithGoogleIdToken,
     mountGoogleSignIn,
     googleClientId,
+    googleClientIdAndroid,
+    hasNativeGoogleSignIn,
     getSecurityQuestion,
     resetPassword,
     logout,

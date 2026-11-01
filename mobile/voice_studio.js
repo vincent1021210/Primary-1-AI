@@ -764,10 +764,11 @@
   function mountGoogleSignInUi() {
     const auth = window.XiaoYiAuth;
     if (!auth?.mountGoogleSignIn || !els.googleSignInBtn) return;
-    if (!auth.googleClientId?.()) {
+    if (!auth.googleClientId?.() && !auth.hasNativeGoogleSignIn?.()) {
       if (els.authGoogleZone) els.authGoogleZone.hidden = true;
       return;
     }
+    if (els.authGoogleZone) els.authGoogleZone.hidden = false;
     if (typeof googleSignInCleanup === "function") {
       try {
         googleSignInCleanup();

@@ -1,5 +1,5 @@
 /* 小一 PWA Service Worker — 基本離線殼層快取 */
-const CACHE = "xiao-yi-v9-session";
+const CACHE = "xiao-yi-v10-native-gsi";
 const PRECACHE = [
   "./",
   "./index.html",

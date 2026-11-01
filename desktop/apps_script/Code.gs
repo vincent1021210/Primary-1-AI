@@ -552,10 +552,16 @@ function googleLogin_(body) {
   if (!idToken) return { ok: false, error: "缺少 Google 登入憑證" };
 
   var props = PropertiesService.getScriptProperties();
-  var clientId = String(
-    props.getProperty("GOOGLE_CLIENT_ID") ||
-      "354935544437-1vrje0je178afce6nturpghuu5r16qp6.apps.googleusercontent.com"
-  ).trim();
+  var allowed = [
+    String(
+      props.getProperty("GOOGLE_CLIENT_ID") ||
+        "354935544437-1vrje0je178afce6nturpghuu5r16qp6.apps.googleusercontent.com"
+    ).trim(),
+    String(
+      props.getProperty("GOOGLE_CLIENT_ID_ANDROID") ||
+        "354935544437-7hlcghqle12ar776mgeofdku0b8f7ap7.apps.googleusercontent.com"
+    ).trim(),
+  ].filter(Boolean);
 
   var res = UrlFetchApp.fetch(
     "https://oauth2.googleapis.com/tokeninfo?id_token=" +
@@ -576,7 +582,15 @@ function googleLogin_(body) {
       error: (info && info.error_description) || "Google 憑證無效或已過期",
     };
   }
-  if (String(info.aud || "") !== clientId) {
+  var aud = String(info.aud || "").trim();
+  var audOk = false;
+  for (var i = 0; i < allowed.length; i++) {
+    if (aud && aud === allowed[i]) {
+      audOk = true;
+      break;
+    }
+  }
+  if (!audOk) {
     return { ok: false, error: "Google Client ID 不符" };
   }
   if (String(info.email_verified) !== "true" && info.email_verified !== true) {
