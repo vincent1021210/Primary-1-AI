@@ -218,8 +218,8 @@
     }
     const session = auth.loadSession();
     const authUrlStr = String(auth.authUrl?.() || "");
-    if (!session?.token) {
-      throw new Error("請先登入後再使用語音助理");
+    if (!session?.token || session.backend === "local") {
+      throw new Error("登入已失效，請重新登入後再試");
     }
     let data;
     try {

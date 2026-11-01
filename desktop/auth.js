@@ -160,6 +160,13 @@
     }
   }
 
+  /** 後端已上線時，本機假 session 不能當已登入 */
+  function rejectLocalSessionIfRemote(session) {
+    if (!session?.token) return null;
+    if (useRemote() && session.backend === "local") return null;
+    return session;
+  }
+
   function loadSession() {
     // 網頁版：只讀本次分頁的 sessionStorage（刷新即失效）
     if (!preferPersistentLogin()) {
@@ -168,7 +175,13 @@
           sessionStorage.getItem(TEMP_SESSION_KEY),
           () => sessionStorage.removeItem(TEMP_SESSION_KEY)
         );
-        if (temp) return { ...temp, persistent: false };
+        if (temp) {
+          const ok = rejectLocalSessionIfRemote({ ...temp, persistent: false });
+          if (ok) return ok;
+          try {
+            sessionStorage.removeItem(TEMP_SESSION_KEY);
+          } catch (_) {}
+        }
       } catch (_) {}
       return null;
     }
@@ -179,7 +192,12 @@
       null,
       { ignoreExpiry: true }
     );
-    if (persistent) return { ...persistent, persistent: true };
+    if (persistent) {
+      const ok = rejectLocalSessionIfRemote({ ...persistent, persistent: true });
+      if (ok) return ok;
+      clearSession();
+      return null;
+    }
 
     try {
       const temp = parseSessionRaw(
@@ -188,8 +206,10 @@
         { ignoreExpiry: true }
       );
       if (temp) {
-        saveSession(temp);
-        return { ...temp, persistent: true };
+        const ok = rejectLocalSessionIfRemote({ ...temp, persistent: true });
+        if (!ok) return null;
+        saveSession(ok);
+        return ok;
       }
     } catch (_) {}
     return null;
@@ -216,10 +236,15 @@
         { ignoreExpiry: true }
       );
       if (fromIdb) {
+        const ok = rejectLocalSessionIfRemote({ ...fromIdb, persistent: true });
+        if (!ok) {
+          clearSession();
+          return null;
+        }
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(fromIdb));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(ok));
         } catch (_) {}
-        return { ...fromIdb, persistent: true };
+        return ok;
       }
     } catch (_) {}
     return null;
@@ -741,13 +766,10 @@
   async function refreshMe() {
     const session = loadSession();
     if (!session?.token) return null;
-    const keepOnPhone = preferPersistentLogin();
-    if (!useRemote() || session.backend === "local") {
+    if (!useRemote()) {
       const db = loadLocalUsers();
       const user = db[session.account];
       if (!user) {
-        // 手機版：本機帳號庫缺資料也不踢登入（只存 session）
-        if (keepOnPhone || session.backend !== "local") return session;
         clearSession();
         return null;
       }
@@ -763,16 +785,18 @@
       saveSession({ ...session, ...data, backend: "appscript" });
       return loadSession();
     } catch (err) {
-      // 手機版：網路／過期都不清 session，只有使用者點登出才清
-      if (keepOnPhone) return session;
       const msg = String(err?.message || err || "");
       if (
-        /未登入|工作階段已過期|帳號不存在|unauthorized|401|禁止/i.test(msg)
+        /登入已失效|未登入|工作階段|帳號不存在|unauthorized|401|禁止/i.test(msg)
       ) {
         clearSession();
         return null;
       }
-      return session;
+      // 僅網路異常時暫留已驗證過的後端 session
+      if (preferPersistentLogin() && session.backend === "appscript") {
+        return session;
+      }
+      return null;
     }
   }
 

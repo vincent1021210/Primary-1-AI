@@ -665,6 +665,22 @@
     }, 1000);
   }
 
+  function forceRelogin(reason) {
+    try {
+      window.XiaoYiAuth?.clearSession?.();
+    } catch (_) {}
+    setAuthLocked(true);
+    if (typeof authMode !== "undefined") authMode = "login";
+    syncAuthUiMode();
+    setAuthError(reason || "登入已失效，請重新登入後再試");
+    setAuthOk("");
+    setStatus("請重新登入後再使用小一");
+  }
+
+  function isSessionExpiredMsg(msg) {
+    return /重新登入|登入已失效|未登入|工作階段/i.test(String(msg || ""));
+  }
+
   async function unlockAppAfterLogin() {
     setAuthLocked(false);
     applyUserChrome();
@@ -712,17 +728,13 @@
     const allowRestore = Boolean(session?.token);
     if (allowRestore && session?.token) {
       const me = await auth.refreshMe?.();
-      if (me) {
-        await unlockAppAfterLogin();
-        return;
-      }
-      // refresh 失敗但本機仍有 session：仍解鎖（避免 Apps Script 異常導致被踢出）
-      if (auth.loadSession?.()?.token || session.token) {
+      if (me && auth.loadSession?.()?.token) {
         await unlockAppAfterLogin();
         return;
       }
     }
     setAuthLocked(true);
+    syncAuthUiMode();
   }
 
   function initChromeUi() {
@@ -2216,9 +2228,7 @@
             const msg = String(err?.message || err);
             setStatus(`小一失敗：${msg}`);
             appendChatBubble("assistant", `抱歉：${msg}`);
-            if (/重新登入|登入已失效|未登入|工作階段/i.test(msg)) {
-              document.body?.classList?.add("auth-locked");
-            }
+            if (isSessionExpiredMsg(msg)) forceRelogin(msg);
             return;
           }
         }
@@ -2245,13 +2255,11 @@
         } catch (err) {
           const msg = String(err?.message || err);
           setStatus(`Gemini 失敗：${msg}`);
-          speakText(
-            /重新登入|登入已失效|未登入|工作階段/i.test(msg)
-              ? "登入已失效，請重新登入後再試。"
-              : "抱歉，我剛剛沒想好，請再說一次。"
-          );
-          if (/重新登入|登入已失效|未登入|工作階段/i.test(msg)) {
-            document.body?.classList?.add("auth-locked");
+          if (isSessionExpiredMsg(msg)) {
+            speakText("登入已失效，請重新登入後再試。");
+            forceRelogin(msg);
+          } else {
+            speakText("抱歉，我剛剛沒想好，請再說一次。");
           }
           return;
         }
