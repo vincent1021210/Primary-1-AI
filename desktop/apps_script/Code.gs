@@ -559,7 +559,7 @@ function googleLogin_(body) {
     ).trim(),
     String(
       props.getProperty("GOOGLE_CLIENT_ID_ANDROID") ||
-        "354935544437-7hlcghqle12ar776mgeofdku0b8f7ap7.apps.googleusercontent.com"
+        "354935544437-2hkjcl5fnsioc3i37i3s98eebe0ggdo5.apps.googleusercontent.com"
     ).trim(),
   ].filter(Boolean);
 
