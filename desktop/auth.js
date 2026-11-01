@@ -113,10 +113,6 @@
     return false;
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'A',location:'auth.js:boot',message:'auth boot platform',data:{platform:String(global.XIAO_YI_PLATFORM||''),preferPersistent:preferPersistentLogin(),hasLs:Boolean(localStorage.getItem(STORAGE_KEY)),hasTemp:Boolean((()=>{try{return sessionStorage.getItem(TEMP_SESSION_KEY)}catch(_){return null}})())},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   function authUrl() {
     return String(cfg().appsScriptAuthUrl || "").trim();
   }
@@ -270,9 +266,6 @@
       } catch (_) {}
       // 網頁版不清除手機版的永久登入殘留，避免同瀏覽器互相踢掉
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'D',location:'auth.js:saveSession',message:'session saved',data:{persistent,platform:String(global.XIAO_YI_PLATFORM||''),account:String(data.account||'').slice(0,3)+'***',backend:data.backend||''},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   }
 
   /** 登出：兩邊工作階段都清（含永久與暫存） */
@@ -363,9 +356,6 @@
     if (!url) {
       throw new Error("尚未設定 appsScriptAuthUrl（請見 config.local.js）");
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'A',location:'auth.js:api:start',message:'auth api call start',data:{action:String(action||''),urlHost:(()=>{try{return new URL(url).host}catch(_){return'bad-url'}})(),urlEndsExec:/\/exec\/?$/.test(url),payloadKeys:Object.keys(payload||{})},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     let res;
     try {
       res = await fetch(url, {
@@ -375,9 +365,6 @@
         redirect: "follow",
       });
     } catch (netErr) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'D',location:'auth.js:api:fetch-fail',message:'auth fetch network error',data:{action:String(action||''),error:String(netErr&&netErr.message||netErr)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       throw new Error(`無法連線帳號服務：${netErr?.message || netErr}`);
     }
     const text = await res.text();
@@ -385,16 +372,10 @@
     const looksHtml = /<!doctype html|<html|accounts\.google|sign.?in/i.test(
       text || ""
     );
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'B',location:'auth.js:api:response',message:'auth api raw response',data:{action:String(action||''),status:res.status,ok:res.ok,finalUrl:String(res.url||'').slice(0,120),contentType:String(res.headers.get('content-type')||''),bodyLen:(text||'').length,looksHtml,bodyHead:head},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     let data;
     try {
       data = JSON.parse(text);
     } catch (_) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'C',location:'auth.js:api:parse-fail',message:'auth response not JSON',data:{action:String(action||''),status:res.status,looksHtml,bodyHead:head},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       throw new Error(
         (looksHtml
           ? "Apps Script 回傳登入／授權頁（非 JSON）。請重新部署網頁應用程式，存取權選「任何人」，並確認網址結尾是 /exec"
@@ -402,9 +383,6 @@
           `［診斷 status=${res.status} type=${String(res.headers.get("content-type") || "").slice(0, 40)} head=${head.slice(0, 80)}］`
       );
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-json',hypothesisId:'E',location:'auth.js:api:parsed',message:'auth api parsed JSON',data:{action:String(action||''),ok:Boolean(data&&data.ok),error:String((data&&data.error)||'').slice(0,120),keys:data&&typeof data==='object'?Object.keys(data):[]},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!data?.ok) {
       const errMsg = String(data?.error || "請求失敗");
       // 後端拒絕 session：一律清掉本機 token（含手機「保持登入」殘留的舊後端 token）
@@ -412,9 +390,6 @@
         /未登入|工作階段已過期|帳號不存在|unauthorized|401/i.test(errMsg) &&
         /^(me|geminiassist|appendhistory|listhistory)$/i.test(String(action || ""))
       ) {
-        // #region agent log
-        fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'auth.js:api:clearStaleSession',message:'clearing stale session after backend reject',data:{action:String(action||''),err:errMsg.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         clearSession();
         throw new Error("登入已失效，請重新登入後再試");
       }

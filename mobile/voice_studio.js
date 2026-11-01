@@ -109,9 +109,6 @@
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
   const synth = window.speechSynthesis;
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'A',location:'voice_studio.js:boot',message:'speechSynthesis availability',data:{hasSynth:Boolean(synth),typeofSynth:typeof synth,ua:String(navigator.userAgent||'').slice(0,120),isAndroidNative:Boolean(window.XIAO_YI_ANDROID_NATIVE||window.XiaoYiAndroid)},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   const tagState = AutoTag.createTaggerState();
 
   let recognition = null;
@@ -252,9 +249,6 @@
   }
 
   function setWakeUi(state, preview = "") {
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'wake-ui',hypothesisId:'A',location:'voice_studio.js:setWakeUi',message:'setWakeUi called',data:{state,preview:String(preview||'').slice(0,40),wantListen,listening,listenMode,navConfirmActive:navConfirm.active,btnWake:els.btnWake?.textContent||'',wakeStatusBefore:els.wakeStatus?.textContent||''},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (els.wakeStatus) {
       const geminiVoice = Boolean(window.GeminiTagger?.apiKeyPresent?.());
       const map = geminiVoice
@@ -289,7 +283,9 @@
     const webllm = window.WebLLMTagger?.getState?.();
 
     if (gemini?.ready) {
-      els.aiStatus.textContent = "小一 AI 已連線（伺服器）";
+      els.aiStatus.textContent = gemini.viaBackend
+        ? "已連線後端（需登入）"
+        : "小一 AI 已連線";
       if (els.modelChip) {
         const mid = String(gemini.modelId || "gemini-3.1-flash-lite");
         els.modelChip.textContent = "小一 AI";
@@ -550,11 +546,6 @@
     if (els.authGate) {
       els.authGate.setAttribute("aria-hidden", locked ? "false" : "true");
     }
-    // #region agent log
-    const gate = els.authGate;
-    const cs = gate ? getComputedStyle(gate) : null;
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-bypass',hypothesisId:'E',location:'voice_studio.js:setAuthLocked',message:'auth lock toggled',data:{locked:Boolean(locked),bodyHasClass:document.body.classList.contains('auth-locked'),gateDisplay:cs?.display||null,gatePointer:cs?.pointerEvents||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   }
 
   function setAuthLoginMode() {
@@ -770,12 +761,7 @@
       onSuccess: async () => {
         setAuthOk("Google 登入成功");
         setAuthError("");
-        setAuthLocked(false);
-        applyUserChrome();
-        try {
-          await auth.refreshMe?.();
-        } catch (_) {}
-        applyUserChrome();
+        await unlockAppAfterLogin();
       },
       onError: (err) => {
         setAuthOk("");
@@ -786,21 +772,12 @@
 
   async function initAuthGate() {
     const auth = window.XiaoYiAuth;
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-bypass',hypothesisId:'A',location:'voice_studio.js:initAuthGate:start',message:'init auth gate',data:{hasAuth:Boolean(auth),requireLogin:Boolean(auth?.requireLogin?.()),hasUrl:Boolean(auth?.authUrl?.()),cfgRequire:window.APP_CONFIG?.requireLogin},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!auth) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-bypass',hypothesisId:'A',location:'voice_studio.js:initAuthGate:noAuth',message:'no XiaoYiAuth unlock',data:{},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setAuthLocked(false);
       return;
     }
     // 僅明確 requireLogin: false 時跳過登入畫面
     if (!auth.requireLogin?.()) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-bypass',hypothesisId:'A',location:'voice_studio.js:initAuthGate:skipRequire',message:'requireLogin false unlock',data:{},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setAuthLocked(false);
       applyUserChrome();
       return;
@@ -810,9 +787,6 @@
     const session =
       (await auth.loadSessionAsync?.()) || auth.loadSession?.() || null;
     const allowRestore = Boolean(session?.token);
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login',hypothesisId:'B',location:'voice_studio.js:initAuthGate:session',message:'durable session check',data:{allowRestore,hasToken:Boolean(session?.token),persistent:session?.persistent!==false,account:session?.account?String(session.account).slice(0,3)+'***':'',backend:session?.backend||'',preferPersistent:Boolean(auth.preferPersistentLogin?.())},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (allowRestore && session?.token) {
       await unlockAppAfterLogin();
       // 背景刷新；只有明確未授權才退回登入
@@ -831,9 +805,6 @@
     }
     setAuthLocked(true);
     syncAuthUiMode();
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'keep-login-verify',hypothesisId:'B',location:'mobile/voice_studio.js:initAuthGate:stayLocked',message:'stay on login gate',data:{bodyLocked:document.body.classList.contains('auth-locked'),allowRestore,preferPersistent:Boolean(auth.preferPersistentLogin?.()),platform:String(window.XIAO_YI_PLATFORM||'')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   }
 
   function initChromeUi() {
@@ -1294,9 +1265,6 @@
     if (/^(一下|看看|一下下)$/.test(place)) {
       place = "";
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F',location:'voice_studio.js:extractWeatherPlace',message:'extracted weather place',data:{query:String(q||''),place,useGpsExpected:!place},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     // 空字串 = 用 GPS 查目前位置（不再預設台北）
     return place;
   }
@@ -1326,9 +1294,6 @@
     const forceGps = /這裡|這邊|附近|目前|當地|本地|定位/.test(text);
     const placeIsCoords = Boolean(parseLatLngPlace(place));
     const useGps = forceGps || !place || placeIsCoords;
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:wantsGpsWeather',message:'gps weather decision',data:{query:text,place,forceGps,placeIsCoords,useGps},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return useGps;
   }
 
@@ -1396,9 +1361,6 @@
     // Gemini／上游若直接給 lat,lng，勿走地名 geocode
     const parsed = parseLatLngPlace(raw);
     if (parsed) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'D',location:'voice_studio.js:resolveLocation:coords',message:'using parsed lat,lng',data:{raw,lat:parsed.latitude,lon:parsed.longitude},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return {
         name: "GPS",
         displayName: "目前位置",
@@ -1421,9 +1383,6 @@
       CITY_ALIASES[lookup] || CITY_ALIASES[lookup.replace(/市$/, "")] || "";
     // 不再把 Taipei 無條件塞進候選（避免「新竹如何」失敗就變台北）
     const candidates = [...new Set([lookup, alias].filter(Boolean))];
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'C',location:'voice_studio.js:resolveLocation',message:'resolveLocation candidates',data:{place,raw,matchedCity,lookup,alias,candidates},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     for (const name of candidates) {
       const geoRes = await fetch(
@@ -1433,13 +1392,7 @@
       );
       const geo = await geoRes.json();
       const loc = geo?.results?.[0];
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'C',location:'voice_studio.js:resolveLocation:attempt',message:'geocode attempt',data:{raw,tryName:name,found:Boolean(loc),lat:loc?.latitude,lon:loc?.longitude,resolvedName:loc?.name},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (loc) {
-        // #region agent log
-        fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'D',location:'voice_studio.js:resolveLocation:chosen',message:'location chosen',data:{raw,matchedCity,chosenTry:name,displayName:loc.name,lat:loc.latitude,lon:loc.longitude,fellBackToTaipei:false},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return {
           name: lookup,
           displayName: loc.name || lookup,
@@ -1454,9 +1407,6 @@
     const fallbackKey = alias || CITY_ALIASES[matchedCity] || "";
     const fb = fallbackKey ? CITY_COORDS[fallbackKey] : null;
     if (fb) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'D',location:'voice_studio.js:resolveLocationFallback',message:'using hardcoded coords',data:{raw,fallbackKey,lat:fb.latitude,lon:fb.longitude},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return {
         name: lookup,
         displayName: fb.name,
@@ -1465,9 +1415,6 @@
         longitude: fb.longitude,
       };
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'wx-gps-fail',hypothesisId:'D',location:'voice_studio.js:resolveLocation:throw',message:'geocode failed not found',data:{raw,matchedCity,candidates,looksLikeCoords:/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(raw)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     throw new Error(`找不到地點：${raw}`);
   }
 
@@ -1512,9 +1459,6 @@
     const apiUrl = wantsDaily
       ? `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=${Math.min(dayOffset + 1, 7)}&timezone=auto`
       : `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'C',location:'voice_studio.js:fetchWeatherByLocation',message:'weather api request',data:{dayOffset,mode:wantsDaily?'daily':'current',hasDailyParam:wantsDaily,displayName:loc.displayName||'',spokenPrefix:wantsDaily?(dayOffset===1?'明天':'後天'):'目前'},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const wxRes = await fetch(apiUrl);
     const wx = await wxRes.json();
     const admin = loc.admin1 ? `（${loc.admin1}）` : "";
@@ -1562,9 +1506,6 @@
   async function fetchWeatherText(place, { useGps = false, dayOffset = 0 } = {}) {
     const placeLooksLikeCoords = Boolean(parseLatLngPlace(place));
     const branch = useGps || !place ? "gps" : "geocode";
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'C',location:'voice_studio.js:fetchWeatherText',message:'weather fetch branch',data:{place,useGps,placeLooksLikeCoords,branch,dayOffset},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const loc = useGps || !place
       ? await resolveLocationFromGps()
       : await resolveLocation(place);
@@ -1962,9 +1903,6 @@
     const placeLooksLikeCoords = Boolean(parseLatLngPlace(place));
     const useGps = wantsGpsWeather(q, place);
     const dayOffset = detectWeatherDayOffset(q);
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:runWeatherQuery',message:'weather query start',data:{query:q,place,placeLooksLikeCoords,useGps,dayOffset,hasTomorrowInQuery:/明天|明日/.test(q)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const dayLabel =
       dayOffset === 1 ? "明天" : dayOffset === 2 ? "後天" : "";
     const label = useGps
@@ -1999,9 +1937,6 @@
       setStatus(`已朗讀天氣：${title}`);
     } catch (err) {
       const reason = err?.message || String(err);
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'D',location:'voice_studio.js:runWeatherQuery:catch',message:'weather query failed',data:{query:q,place,placeLooksLikeCoords,useGps,dayOffset,reason:String(reason).slice(0,120)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       // GPS 失敗且有指定地名以外的備援：改查地名；純 GPS 失敗則提示
       if (useGps && place) {
         try {
@@ -2455,18 +2390,12 @@
         { audio: audioPayload, image: vision }
       );
       if (vision) clearPendingVisionImage();
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'C',location:'voice_studio.js:sendRecordingToGemini:assistOk',message:'Gemini assist returned',data:{hasSpeak:Boolean(result?.speak),actionCount:(result?.actions||[]).length,speakLen:String(result?.speak||'').length,hasSynth:Boolean(synth)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       await applyGeminiAssistResult(result, result.speak || "語音指令", {
         hadVision: Boolean(vision),
         fromAudio: true,
       });
       setWakeUi("done", result.speak || "");
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'D',location:'voice_studio.js:sendRecordingToGemini:catch',message:'sendRecordingToGemini caught',data:{errMsg:String(err?.message||err),errName:String(err?.name||''),stack:String(err?.stack||'').slice(0,400),hasSynth:Boolean(synth)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setStatus(`語音理解失敗：${err?.message || err}`);
       setBadge("", "就緒");
       setWakeUi("idle");
@@ -2797,15 +2726,9 @@
         }
         if (window.GeminiTagger?.apiKeyPresent?.()) {
           try {
-            // #region agent log
-            fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'D',location:'voice_studio.js:executeCommand:text',message:'text path before gemini',data:{cmdLen:String(command||'').length,loggedIn:Boolean(window.XiaoYiAuth?.isLoggedIn?.()),hasToken:Boolean(window.XiaoYiAuth?.loadSession?.()?.token),authLocked:document.body?.classList?.contains('auth-locked')},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
             await executeViaGemini(command, { fromText: true });
             return;
           } catch (err) {
-            // #region agent log
-            fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:textCatch',message:'text gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
             const msg = String(err?.message || err);
             setStatus(`小一失敗：${msg}`);
             appendChatBubble("assistant", `抱歉：${msg}`);
@@ -2833,15 +2756,9 @@
       // 其餘語音指令：強制走 Gemini
       if (window.GeminiTagger?.apiKeyPresent?.()) {
         try {
-          // #region agent log
-          fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'E',location:'voice_studio.js:executeCommand:voice',message:'voice path before gemini',data:{cmdLen:String(command||'').length,loggedIn:Boolean(window.XiaoYiAuth?.isLoggedIn?.()),hasToken:Boolean(window.XiaoYiAuth?.loadSession?.()?.token),authLocked:document.body?.classList?.contains('auth-locked')},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           await executeViaGemini(command);
           return;
         } catch (err) {
-          // #region agent log
-          fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'B',location:'voice_studio.js:executeCommand:voiceCatch',message:'voice gemini failed',data:{err:String(err&&err.message||err).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           const msg = String(err?.message || err);
           setStatus(`Gemini 失敗：${msg}`);
           speakText(
@@ -2981,9 +2898,6 @@
   }
 
   function updateListenButtons() {
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'wake-ui',hypothesisId:'B',location:'voice_studio.js:updateListenButtons',message:'updateListenButtons',data:{wantListen,listening,listenMode,geminiRecording,wakeStatus:els.wakeStatus?.textContent||'',beforeBtn:els.btnWake?.textContent||''},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const wakeOn =
       geminiRecording ||
       (listenMode === "wake" && (wantListen || listening));
@@ -3015,9 +2929,6 @@
     rec.onstart = () => {
       if (generation !== listenGeneration) return;
       listening = true;
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F1',location:'voice_studio.js:onstart',message:'recognition started',data:{listenMode,wantListen,isAwake:wakeSession.isAwake,generation},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (listenMode === "wake") {
         setBadge("listening", "喚醒監聽");
         setWakeUi(wakeSession.isAwake ? "awake" : "listening");
@@ -3035,10 +2946,6 @@
 
     rec.onresult = (event) => {
       if (generation !== listenGeneration) return;
-      // #region agent log
-      const _last = event.results[event.results.length - 1];
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F4',location:'voice_studio.js:onresult',message:'speech puzzle piece',data:{listenMode,isFinal:_last?.isFinal,transcript:(_last?.[0]?.transcript||'').slice(0,60),cache:String(finalTranscriptCache||'').slice(0,80),resultIndex:event.resultIndex,len:event.results.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       // 手機 isFinal 過敏感：一律走拼圖快取，靜音後再執行
       onSpeechPuzzleResult(event);
     };
@@ -3046,9 +2953,6 @@
     rec.onerror = (event) => {
       if (generation !== listenGeneration) return;
       const err = event.error || "unknown";
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F2',location:'voice_studio.js:onerror',message:'recognition error',data:{err,wantListen,listening,listenMode,ignoreEndOnce,ttsPausedListen,generation,synthSpeaking:synth.speaking},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (err === "not-allowed") {
         setStatus(
           isMobileOrTwa()
@@ -3074,17 +2978,11 @@
 
     rec.onend = () => {
       if (generation !== listenGeneration) {
-        // #region agent log
-        fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F5',location:'voice_studio.js:onend-stale',message:'ignore stale onend',data:{generation,listenGeneration},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return;
       }
       listening = false;
       const skipRestart = ignoreEndOnce || ttsPausedListen;
       if (ignoreEndOnce) ignoreEndOnce = false;
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F5',location:'voice_studio.js:onend',message:'recognition ended',data:{wantListen,listenMode,skipRestart,willRestart:wantListen&&!skipRestart,synthSpeaking:synth.speaking,isAwake:wakeSession.isAwake,generation},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       updateListenButtons();
       if (listenMode === "dictation" && !finalTranscriptCache) {
         AutoTag.flushBuffer(tagState, onFlushRaw);
@@ -3298,9 +3196,6 @@
     recognition = createRecognition(generation);
     try {
       recognition.start();
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F1',location:'voice_studio.js:startListen',message:'recognition.start() called',data:{mode,isRestart,wantListen,generation},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (!isRestart) {
         setStatus(
           mode === "wake"
@@ -3312,9 +3207,6 @@
         if (mode === "wake") setWakeUi("listening");
       }
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'post-fix',hypothesisId:'F1',location:'voice_studio.js:startListenCatch',message:'recognition.start() threw',data:{mode,isRestart,error:String(err&&err.message||err)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setStatus(`無法啟動：${err.message || err}`);
       wantListen = false;
       releaseScreenWakeLock();
@@ -3765,9 +3657,6 @@
     const password = String(els.authPassword?.value || "");
     const displayName = String(els.authDisplayName?.value || "").trim();
     const code = String(els.authCode?.value || "").trim();
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'auth-bypass',hypothesisId:'D',location:'voice_studio.js:authSubmit',message:'login/register/forgot click',data:{mode:authMode,hasAccount:Boolean(account),passwordLen:password.length,hasCode:Boolean(code)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     if (!account) {
       setAuthError("請輸入帳號（Gmail）");

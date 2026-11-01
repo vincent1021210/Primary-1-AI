@@ -218,9 +218,6 @@
     }
     const session = auth.loadSession();
     const authUrlStr = String(auth.authUrl?.() || "");
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'A',location:'gemini_tagger.js:callGeminiViaBackend:session',message:'backend call session check',data:{hasToken:Boolean(session?.token),tokenLen:String(session?.token||'').length,tokenPrefix:String(session?.token||'').slice(0,6),accountHint:String(session?.account||'').slice(0,3),backend:String(session?.backend||''),urlTail:authUrlStr.slice(-28),hasAudio:Boolean(audio?.data),hasImage:Boolean(image?.data),textLen:String(userText||'').length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!session?.token) {
       throw new Error("請先登入後再使用語音助理");
     }
@@ -241,14 +238,8 @@
           : null,
       });
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'B',location:'gemini_tagger.js:callGeminiViaBackend:error',message:'geminiAssist threw',data:{err:String(err&&err.message||err).slice(0,160),tokenLen:String(session?.token||'').length,urlTail:authUrlStr.slice(-28)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       throw err;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7629/ingest/06c95251-9e08-4695-966d-b104e29c0862',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c607e2'},body:JSON.stringify({sessionId:'c607e2',runId:'pre-fix',hypothesisId:'C',location:'gemini_tagger.js:callGeminiViaBackend:ok',message:'geminiAssist ok',data:{textLen:String(data?.text||'').length,model:String(data?.model||'')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return String(data.text || "").trim();
   }
 

@@ -20,6 +20,14 @@ function doGet(e) {
   });
 }
 
+/** Google 一鍵登入帳號的安全問題標記（禁止用忘記密碼重設） */
+var GOOGLE_ONLY_SECURITY_QUESTION = "（Google 登入｜無法用安全問題重設）";
+
+function isGoogleOnlyAccount_(user) {
+  var q = String((user && user.securityQuestion) || "");
+  return q.indexOf("Google 登入") >= 0;
+}
+
 function doPost(e) {
   try {
     var raw = (e && e.postData && e.postData.contents) || "{}";
@@ -53,9 +61,6 @@ function doPost(e) {
     }
     if (action === "geminiassist" || action === "gemini_assist") {
       return jsonOut_(geminiAssist_(body));
-    }
-    if (action === "debugstats" || action === "debug_stats") {
-      return jsonOut_(debugStats_(body.account));
     }
 
     return jsonOut_({ ok: false, error: "未知 action" });
@@ -456,6 +461,12 @@ function getSecurityQuestion_(body) {
         "此帳號尚未設定安全問題（舊帳號）。請用原密碼登入，或重新註冊新帳號。",
     };
   }
+  if (isGoogleOnlyAccount_(user)) {
+    return {
+      ok: false,
+      error: "此帳號以 Google 登入建立，請改用「使用 Google 登入」，無法用安全問題重設密碼。",
+    };
+  }
   return {
     ok: true,
     account: account,
@@ -474,6 +485,12 @@ function resetPassword_(body) {
   }
   var user = findUserRow_(account);
   if (!user) return { ok: false, error: "找不到此帳號" };
+  if (isGoogleOnlyAccount_(user)) {
+    return {
+      ok: false,
+      error: "此帳號以 Google 登入建立，請改用「使用 Google 登入」，無法用安全問題重設密碼。",
+    };
+  }
   if (!user.answerHash || !user.salt) {
     return { ok: false, error: "此帳號未設定安全問題，無法重設" };
   }
@@ -495,28 +512,6 @@ function resetPassword_(body) {
     ok: true,
     account: account,
     message: "密碼重設成功，請用新密碼登入",
-  };
-}
-
-/** 除錯用：只回傳帳號數量／是否有某帳號（不含密碼） */
-function debugStats_(optAccount) {
-  var ss = getSpreadsheet_();
-  ensureSheets_(ss);
-  var users = usersSheet_();
-  var sessions = sessionsSheet_();
-  var userCount = Math.max(0, users.getLastRow() - 1);
-  var sessionCount = Math.max(0, sessions.getLastRow() - 1);
-  var account = normalizeAccount_(optAccount || "");
-  var hasAccount = account ? Boolean(findUserRow_(account)) : null;
-  var props = PropertiesService.getScriptProperties();
-  var hasGeminiKey = Boolean(String(props.getProperty("GEMINI_API_KEY") || "").trim());
-  return {
-    ok: true,
-    userCount: userCount,
-    sessionCount: sessionCount,
-    hasAccount: hasAccount,
-    hasGeminiKey: hasGeminiKey,
-    spreadsheetId: ss.getId(),
   };
 }
 
@@ -601,14 +596,16 @@ function googleLogin_(body) {
     var salt = randomToken_();
     var randomPass = randomToken_() + randomToken_();
     var passwordHash = hashPassword_(randomPass, salt);
+    // 答案為不可預測隨機值；安全問題標記禁止忘記密碼重設
+    var sealedAnswer = randomToken_() + randomToken_();
     usersSheet_().appendRow([
       account,
       displayName.slice(0, 40),
       salt,
       passwordHash,
       new Date().toISOString(),
-      "(Google 登入)",
-      hashPassword_("google-oauth", salt),
+      GOOGLE_ONLY_SECURITY_QUESTION,
+      hashPassword_(sealedAnswer, salt),
     ]);
     user = findUserRow_(account);
   } else if (displayName && (!user.displayName || user.displayName === account)) {
