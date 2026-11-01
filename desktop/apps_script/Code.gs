@@ -11,10 +11,23 @@ var CODE_TTL_MS = 10 * 60 * 1000; // 驗證碼 10 分鐘
 var CODE_COOLDOWN_MS = 60 * 1000; // 重寄間隔 60 秒
 var MIN_PASSWORD_LEN = 8;
 
+function readGeminiApiKey_() {
+  var props = PropertiesService.getScriptProperties();
+  var names = ["GEMINI_API_KEY", "GEMINIAPI_KEY", "Gemini_API_KEY"];
+  for (var i = 0; i < names.length; i++) {
+    var raw = String(props.getProperty(names[i]) || "").trim();
+    if (raw) {
+      return raw.replace(/^["']+|["']+$/g, "").trim();
+    }
+  }
+  return "";
+}
+
 function doGet(e) {
   return jsonOut_({
     ok: true,
     service: "xiao-yi-auth",
+    hasGeminiKey: Boolean(readGeminiApiKey_()),
     hint:
       "POST：sendRegisterCode|register|login|googleLogin|getSecurityQuestion|resetPassword|logout|me|appendHistory|listHistory|geminiAssist",
   });
@@ -704,16 +717,16 @@ function geminiAssist_(body) {
   var session = resolveSession_(body.token);
   if (!session) return { ok: false, error: "未登入或工作階段已過期" };
 
-  var props = PropertiesService.getScriptProperties();
-  var key = String(props.getProperty("GEMINI_API_KEY") || "").trim();
+  var key = readGeminiApiKey_();
   if (!key) {
     return {
       ok: false,
       error:
-        "後端尚未設定 GEMINI_API_KEY。請在 Apps Script「專案設定 → 指令碼屬性」新增後重新部署。",
+        "後端尚未設定 GEMINI_API_KEY。請在這份專案「專案設定 → 指令碼屬性」新增名稱 GEMINI_API_KEY（含底線）並按儲存。不必重新部署。",
     };
   }
 
+  var props = PropertiesService.getScriptProperties();
   var model = String(
     props.getProperty("GEMINI_MODEL") ||
       body.model ||
